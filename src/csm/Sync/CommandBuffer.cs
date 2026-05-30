@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using CSM.API;
 using CSM.API.Commands;
@@ -38,10 +37,6 @@ namespace CSM.Sync
         }
 
         private static readonly TickSlot[] _ring = new TickSlot[RING_SIZE];
-
-        // Track the lowest tick we're still waiting for (for diagnostics)
-        private static uint _lowestWaitingTick = uint.MaxValue;
-        private static uint _highestBufferedTick;
 
         /// <summary>Number of commands buffered across all ticks.</summary>
         public static int TotalBuffered { get; private set; }
@@ -83,9 +78,6 @@ namespace CSM.Sync
             });
 
             TotalBuffered++;
-
-            if (targetTick < _lowestWaitingTick) _lowestWaitingTick = targetTick;
-            if (targetTick > _highestBufferedTick) _highestBufferedTick = targetTick;
 
             Log.Debug($"[CommandBuffer] Buffered {cmd.GetType().Name} for tick {targetTick} " +
                       $"(current={currentTick}, idx={idx}, total={TotalBuffered})");
@@ -157,8 +149,6 @@ namespace CSM.Sync
                 _ring[i].Complete = false;
             }
             TotalBuffered = 0;
-            _lowestWaitingTick = uint.MaxValue;
-            _highestBufferedTick = 0;
         }
     }
 }

@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 using ColossalFramework;
 
 namespace CSM.Sync
@@ -55,9 +54,6 @@ namespace CSM.Sync
 
             // 4. Tick clock
             h = Fnv1a(h, BitConverter.GetBytes(TickClock.LocalTick));
-
-            // 5. Build index
-            h = Fnv1a(h, BitConverter.GetBytes(SimulationManager.instance.m_currentBuildIndex));
 
             return h;
         }

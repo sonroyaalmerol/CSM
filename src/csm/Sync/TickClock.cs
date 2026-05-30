@@ -117,7 +117,7 @@ namespace CSM.Sync
 
         // ── Internals ──────────────────────────────────────
 
-        private static long GetMaxLatencyMs()
+        internal static long GetMaxLatencyMs()
         {
             if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
             {

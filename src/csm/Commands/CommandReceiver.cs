@@ -12,7 +12,7 @@ namespace CSM.Commands
     public static class CommandReceiver
     {
         /// <summary>
-        ///     This method is used to parse an incoming message on the client
+        ///     Parse an incoming message on the client/server
         ///     and execute the appropriate actions.
         /// </summary>
         /// <param name="reader">The incoming packet including the command type byte.</param>
@@ -46,46 +46,12 @@ namespace CSM.Commands
                 return false;
             }
 
-            // ── Tick-sync buffer path ──────────────────────
-            // If this command requires tick sync and we're connected,
-            // buffer it for execution at the assigned target tick.
-            if (handler.RequiresTickSync && TickClock.IsInitialized)
-            {
-                uint targetTick = cmd.TargetFrameIndex;
-
-                // If target tick is 0, it wasn't assigned yet (direct protobuf path).
-                // Assign a reasonable default: current tick + pipeline depth.
-                if (targetTick == 0)
-                {
-                    targetTick = TickClock.LocalTick + TickClock.PipelineDepth;
-                }
-
-                bool buffered = CommandBuffer.Buffer(targetTick, handler, cmd, TickClock.LocalTick);
-
-                if (buffered)
-                {
-                    // Command was buffered for future execution. Still relay if needed.
-                    return handler.RelayOnServer;
-                }
-                // Target tick already passed — fall through to immediate execution.
-                // This handles the case where the command arrived late.
-            }
-
-            // ── Transaction path (non-tick-synced commands) ──
-            if (TransactionHandler.CheckReceived(handler, cmd))
-            {
-                return handler.RelayOnServer;
-            }
-
-            // ── Immediate execution ────────────────────────
-            handler.Parse(cmd);
-
+            RouteCommand(handler, cmd);
             return handler.RelayOnServer;
         }
 
         /// <summary>
-        ///     Parse a sync envelope packet. Used by the new SyncBatch wire format.
-        ///     Handles TICK_SYNC, STATE_HASH, and COMMAND_BATCH packets.
+        ///     Parse a sync envelope packet (TICK_SYNC, STATE_HASH, COMMAND_BATCH).
         /// </summary>
         public static void ParseSyncPacket(byte[] data)
         {
@@ -107,6 +73,40 @@ namespace CSM.Commands
             }
         }
 
+        // ── Shared command routing (used by Parse and HandleCommandBatch) ──
+
+        /// <summary>
+        ///     Route a command through the tick-sync buffer or immediate execution.
+        ///     Tick-synced commands are buffered for their target tick;
+        ///     all others go through the transaction handler or execute directly.
+        /// </summary>
+        private static void RouteCommand(CommandHandler handler, CommandBase cmd)
+        {
+            if (handler.RequiresTickSync && TickClock.IsInitialized)
+            {
+                uint targetTick = cmd.TargetFrameIndex;
+
+                // If target tick is 0, it wasn't assigned (direct protobuf path).
+                // Assign a reasonable default: current tick + pipeline depth.
+                if (targetTick == 0)
+                {
+                    targetTick = TickClock.LocalTick + TickClock.PipelineDepth;
+                }
+
+                bool buffered = CommandBuffer.Buffer(targetTick, handler, cmd, TickClock.LocalTick);
+                if (buffered)
+                    return;
+
+                // Target tick already passed — fall through to immediate execution.
+            }
+
+            // Transaction path or immediate execution
+            if (TransactionHandler.CheckReceived(handler, cmd))
+                return;
+
+            handler.Parse(cmd);
+        }
+
         // ── Sync packet handlers ───────────────────────────
 
         private static void HandleTickSync(byte[] data)
@@ -121,7 +121,6 @@ namespace CSM.Commands
         {
             var pkt = SyncBatch.Parse(data);
 
-            // Compute our own hash at the same tick
             ulong ourHash = StateHasher.ComputeHash();
 
             if (ourHash != pkt.StateHash)
@@ -142,7 +141,6 @@ namespace CSM.Commands
 
             foreach (var raw in pkt.Commands)
             {
-                // Deserialize the protobuf payload
                 CommandBase cmd = Deserialize(raw.Payload);
                 if (cmd == null) continue;
 
@@ -152,34 +150,17 @@ namespace CSM.Commands
                 CommandHandler handler = CommandInternal.Instance.GetCommandHandler(cmd.GetType());
                 if (handler == null) continue;
 
-                // Buffer or execute based on tick-sync requirement
-                if (handler.RequiresTickSync && TickClock.IsInitialized)
-                {
-                    CommandBuffer.Buffer(pkt.TargetTick, handler, cmd, TickClock.LocalTick);
-                }
-                else
-                {
-                    // Non-tick-synced: execute immediately
-                    if (TransactionHandler.CheckReceived(handler, cmd))
-                        continue;
-                    handler.Parse(cmd);
-                }
+                RouteCommand(handler, cmd);
             }
 
-            // If this is the last batch for this tick, mark it complete
             if (pkt.IsLastBatch && pkt.TargetTick > 0)
             {
                 CommandBuffer.MarkComplete(pkt.TargetTick);
             }
         }
 
-        /// <summary>
-        ///     This method is used to extract the command type from an incoming message
-        ///     and return the matching handler object.
-        /// </summary>
-        /// <param name="reader">The incoming packet including the command type byte.</param>
-        /// <param name="handler">This returns the command handler object. May be null if the command was not found.</param>
-        /// <param name="cmd">This returns the command data object.</param>
+        // ── Deserialization ────────────────────────────────
+
         private static void Parse(NetPacketReader reader, out CommandHandler handler, out CommandBase cmd)
         {
             cmd = Deserialize(reader.GetRemainingBytes());
@@ -197,18 +178,12 @@ namespace CSM.Commands
         /// <summary>
         ///     Deserialize the command from a byte array.
         /// </summary>
-        /// <param name="message">A byte array of the message</param>
-        /// <returns>The deserialized command.</returns>
         public static CommandBase Deserialize(byte[] message)
         {
-            CommandBase result;
-
             using (MemoryStream stream = new MemoryStream(message))
             {
-                result = (CommandBase)CommandInternal.Instance.Model.Deserialize(stream, null, typeof(CommandBase));
+                return (CommandBase)CommandInternal.Instance.Model.Deserialize(stream, null, typeof(CommandBase));
             }
-
-            return result;
         }
     }
 }

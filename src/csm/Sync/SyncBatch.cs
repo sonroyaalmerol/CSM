@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using CSM.API;
-using CSM.API.Commands;
-using CSM.Networking;
 
 namespace CSM.Sync
 {
@@ -58,6 +55,9 @@ namespace CSM.Sync
         private const byte FLAG_HAS_PIPELINE_DEPTH = 0x20;
         private const byte FLAG_LAST_BATCH = 0x40;
 
+        // Pooled writer to avoid allocation per packet.
+        private static readonly SyncWriter _pooledWriter = new SyncWriter(256);
+
         // ── Build: TICK_SYNC (server → clients) ────────────
 
         /// <summary>
@@ -67,8 +67,8 @@ namespace CSM.Sync
         /// </summary>
         public static byte[] BuildTickSync(uint serverTick, uint pipelineDepth)
         {
-            var w = new SyncWriter(16);
-            // Header: type=1, has_pipeline_depth=1
+            var w = _pooledWriter;
+            w.Reset();
             byte header = TYPE_TICK_SYNC | FLAG_HAS_PIPELINE_DEPTH;
             w.WriteByte(header);
             w.WriteVarInt(serverTick);
@@ -84,7 +84,8 @@ namespace CSM.Sync
         /// </summary>
         public static byte[] BuildStateHash(uint tick, ulong hash, int senderId)
         {
-            var w = new SyncWriter(24);
+            var w = _pooledWriter;
+            w.Reset();
             byte header = TYPE_STATE_HASH | FLAG_HAS_TARGET_TICK | FLAG_HAS_SENDER_ID;
             w.WriteByte(header);
             w.WriteVarInt(tick);
@@ -103,10 +104,8 @@ namespace CSM.Sync
         public static byte[] BuildCommandBatch(uint targetTick, int senderId,
             List<CommandEntry> commands, bool isLastBatch)
         {
-            // Estimate: ~10 bytes header + ~10 bytes per command overhead + payloads
-            int estSize = 16 + commands.Count * 10;
-            foreach (var cmd in commands) estSize += cmd.Payload.Length;
-            var w = new SyncWriter(estSize);
+            var w = _pooledWriter;
+            w.Reset();
 
             // Header
             byte header = TYPE_COMMAND_BATCH | FLAG_HAS_TARGET_TICK | FLAG_HAS_SENDER_ID;
@@ -174,13 +173,13 @@ namespace CSM.Sync
                     result.Commands = new List<ParsedCommand>((int)count);
                     for (int i = 0; i < count; i++)
                     {
-                        var cmd = new ParsedCommand
+                        uint typeId = r.ReadVarInt();
+                        uint len = r.ReadVarInt();
+                        result.Commands.Add(new ParsedCommand
                         {
-                            TypeId = r.ReadVarInt(),
-                            PayloadLength = r.ReadVarInt()
-                        };
-                        cmd.Payload = r.ReadBytes((int)cmd.PayloadLength);
-                        result.Commands.Add(cmd);
+                            TypeId = typeId,
+                            Payload = r.ReadBytes((int)len)
+                        });
                     }
                     break;
             }
@@ -193,7 +192,7 @@ namespace CSM.Sync
         /// <summary>A command awaiting envelope wrapping.</summary>
         public struct CommandEntry
         {
-            /// <summary>Registration-order command type ID from CommandInternal.</summary>
+            /// <summary>Registration-order command type ID.</summary>
             public uint TypeId;
             /// <summary>Protobuf-serialized command payload.</summary>
             public byte[] Payload;
@@ -223,7 +222,6 @@ namespace CSM.Sync
         public struct ParsedCommand
         {
             public uint TypeId;
-            public uint PayloadLength;
             public byte[] Payload;
         }
 

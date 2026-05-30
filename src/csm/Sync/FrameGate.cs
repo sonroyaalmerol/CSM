@@ -1,6 +1,5 @@
 using System;
 using CSM.API;
-using CSM.Commands;
 
 namespace CSM.Sync
 {

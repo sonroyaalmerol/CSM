@@ -1,7 +1,6 @@
 ﻿using System;
 using ColossalFramework;
 using CSM.API;
-using CSM.API.Commands;
 using CSM.API.Helpers;
 using CSM.API.Networking.Status;
 using CSM.BaseGame.Injections;
@@ -25,20 +24,7 @@ namespace CSM.Extensions
 
         private static int GetLatencyAwareSyncIntervalMs()
         {
-            long maxLatency = 0;
-            if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
-            {
-                maxLatency = MultiplayerManager.Instance.CurrentClient.ClientPlayer.Latency;
-            }
-            else if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server &&
-                     MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Count > 0)
-            {
-                foreach (var player in MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Values)
-                {
-                    if (player.Latency > maxLatency)
-                        maxLatency = player.Latency;
-                }
-            }
+            long maxLatency = TickClock.GetMaxLatencyMs();
 
             // Scale sync interval: faster sync at higher latency, clamped to [500ms, 2000ms]
             return (int)Math.Max(500, Math.Min(2000, maxLatency * 3));
@@ -139,14 +125,7 @@ namespace CSM.Extensions
         {
             uint depth = TickClock.CalculatePipelineDepth();
             byte[] packet = SyncBatch.BuildTickSync(TickClock.LocalTick, depth);
-
-            foreach (var player in MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Values)
-            {
-                if (player is CSMPlayer csmPlayer && csmPlayer.NetPeer != null)
-                {
-                    csmPlayer.NetPeer.Send(packet, LiteNetLib.DeliveryMethod.ReliableSequenced);
-                }
-            }
+            MultiplayerManager.Instance.CurrentServer.SendRawToAll(packet, DeliveryMethod.ReliableSequenced);
         }
 
         // ── State hash broadcast ───────────────────────────
@@ -164,22 +143,14 @@ namespace CSM.Extensions
 
             if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
             {
-                // Server sends to all clients
-                foreach (var player in MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Values)
-                {
-                    if (player is CSMPlayer csmPlayer && csmPlayer.NetPeer != null)
-                    {
-                        csmPlayer.NetPeer.Send(packet, LiteNetLib.DeliveryMethod.Unreliable);
-                    }
-                }
+                MultiplayerManager.Instance.CurrentServer.SendRawToAll(packet, DeliveryMethod.Unreliable);
             }
             else
             {
-                // Client sends to server
                 var serverPeer = MultiplayerManager.Instance.CurrentClient.ServerPeer;
                 if (serverPeer != null)
                 {
-                    serverPeer.Send(packet, LiteNetLib.DeliveryMethod.Unreliable);
+                    serverPeer.Send(packet, DeliveryMethod.Unreliable);
                 }
             }
         }
