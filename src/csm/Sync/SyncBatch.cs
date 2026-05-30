@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace CSM.Sync
 {
@@ -11,13 +10,13 @@ namespace CSM.Sync
     ///     ┌─────────────────────────────────────────────────┐
     ///     │ [1 byte] Header flags                            │
     ///     │   bits 0-2: packet type                          │
-    ///     │     0 = COMMAND_BATCH (client→server or relay)  │
+    ///     │     0 = COMMAND_BATCH (reserved, not yet used)  │
     ///     │     1 = TICK_SYNC    (server→client)            │
     ///     │     2 = STATE_HASH   (bidirectional)            │
     ///     │   bit  3:   has_target_tick                     │
     ///     │   bit  4:   has_sender_id                       │
     ///     │   bit  5:   has_pipeline_depth                  │
-    ///     │   bit  6:   is_last_batch_in_tick               │
+    ///     │   bit  6:   reserved                            │
     ///     │   bit  7:   reserved                            │
     ///     ├─────────────────────────────────────────────────┤
     ///     │ [varint] target tick    (if has_target_tick)     │
@@ -27,24 +26,22 @@ namespace CSM.Sync
     ///     │ Per-type payload (see below)                     │
     ///     └─────────────────────────────────────────────────┘
     ///
-    ///     COMMAND_BATCH payload:
-    ///       [varint] command count
-    ///       Per command:
-    ///         [varint] command type id (0-255, assigned by registration order)
-    ///         [varint] payload byte length
-    ///         [bytes]  protobuf-encoded command data
-    ///
     ///     TICK_SYNC payload:
     ///       [varint] server current tick
     ///
     ///     STATE_HASH payload:
     ///       [varint] tick number
     ///       [8 bytes] FNV-1a 64-bit hash
+    ///
+    ///     COMMAND_BATCH is reserved for future use where the server
+    ///     may relay multiple commands for a tick in a single envelope.
+    ///     Currently all commands are relayed individually with an
+    ///     authoritative TargetFrameIndex stamped by the server.
     /// </summary>
     public static class SyncBatch
     {
         // ── Packet type constants ──────────────────────────
-        public const byte TYPE_COMMAND_BATCH = 0;
+        public const byte TYPE_COMMAND_BATCH = 0; // Reserved
         public const byte TYPE_TICK_SYNC = 1;
         public const byte TYPE_STATE_HASH = 2;
 
@@ -53,7 +50,6 @@ namespace CSM.Sync
         private const byte FLAG_HAS_TARGET_TICK = 0x08;
         private const byte FLAG_HAS_SENDER_ID = 0x10;
         private const byte FLAG_HAS_PIPELINE_DEPTH = 0x20;
-        private const byte FLAG_LAST_BATCH = 0x40;
 
         // Pooled writer to avoid allocation per packet.
         private static readonly SyncWriter _pooledWriter = new SyncWriter(256);
@@ -94,42 +90,6 @@ namespace CSM.Sync
             return w.ToArray();
         }
 
-        // ── Build: COMMAND_BATCH (client→server or server→client relay) ──
-
-        /// <summary>
-        ///     Build a COMMAND_BATCH envelope wrapping one or more serialized commands.
-        ///     Each command payload is already protobuf-serialized.
-        ///     The envelope adds only ~5 bytes of overhead per command.
-        /// </summary>
-        public static byte[] BuildCommandBatch(uint targetTick, int senderId,
-            List<CommandEntry> commands, bool isLastBatch)
-        {
-            var w = _pooledWriter;
-            w.Reset();
-
-            // Header
-            byte header = TYPE_COMMAND_BATCH | FLAG_HAS_TARGET_TICK | FLAG_HAS_SENDER_ID;
-            if (isLastBatch) header |= FLAG_LAST_BATCH;
-            w.WriteByte(header);
-
-            // Tick and sender
-            w.WriteVarInt(targetTick);
-            w.WriteZigZag(senderId);
-
-            // Command count
-            w.WriteVarInt((uint)commands.Count);
-
-            // Commands
-            foreach (var cmd in commands)
-            {
-                w.WriteVarInt(cmd.TypeId);
-                w.WriteVarInt((uint)cmd.Payload.Length);
-                w.WriteBytes(cmd.Payload, 0, cmd.Payload.Length);
-            }
-
-            return w.ToArray();
-        }
-
         // ── Parse ──────────────────────────────────────────
 
         /// <summary>
@@ -154,8 +114,6 @@ namespace CSM.Sync
             if ((header & FLAG_HAS_PIPELINE_DEPTH) != 0)
                 result.PipelineDepth = r.ReadVarInt();
 
-            result.IsLastBatch = (header & FLAG_LAST_BATCH) != 0;
-
             // Parse type-specific payload
             switch (type)
             {
@@ -167,36 +125,12 @@ namespace CSM.Sync
                     result.HashTick = r.ReadVarInt();
                     result.StateHash = BitConverter.ToUInt64(r.ReadBytes(8), 0);
                     break;
-
-                case TYPE_COMMAND_BATCH:
-                    uint count = r.ReadVarInt();
-                    result.Commands = new List<ParsedCommand>((int)count);
-                    for (int i = 0; i < count; i++)
-                    {
-                        uint typeId = r.ReadVarInt();
-                        uint len = r.ReadVarInt();
-                        result.Commands.Add(new ParsedCommand
-                        {
-                            TypeId = typeId,
-                            Payload = r.ReadBytes((int)len)
-                        });
-                    }
-                    break;
             }
 
             return result;
         }
 
         // ── Data structures ────────────────────────────────
-
-        /// <summary>A command awaiting envelope wrapping.</summary>
-        public struct CommandEntry
-        {
-            /// <summary>Registration-order command type ID.</summary>
-            public uint TypeId;
-            /// <summary>Protobuf-serialized command payload.</summary>
-            public byte[] Payload;
-        }
 
         /// <summary>A parsed sync packet.</summary>
         public class ParsedPacket
@@ -205,7 +139,6 @@ namespace CSM.Sync
             public uint TargetTick;
             public int SenderId;
             public uint PipelineDepth;
-            public bool IsLastBatch;
 
             // TICK_SYNC
             public uint ServerTick;
@@ -213,16 +146,6 @@ namespace CSM.Sync
             // STATE_HASH
             public uint HashTick;
             public ulong StateHash;
-
-            // COMMAND_BATCH
-            public List<ParsedCommand> Commands;
-        }
-
-        /// <summary>A single parsed command from a batch.</summary>
-        public struct ParsedCommand
-        {
-            public uint TypeId;
-            public byte[] Payload;
         }
 
         // ── Header inspection ──────────────────────────────

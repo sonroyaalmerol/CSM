@@ -18,10 +18,11 @@ namespace CSM.Commands
         /// <param name="reader">The incoming packet including the command type byte.</param>
         /// <param name="peer">The peer object of the sending client.</param>
         /// <param name="useSequenced">Whether the relay should use ReliableSequenced delivery.</param>
+        /// <param name="cmd">The deserialized command (needed by server for relay stamping).</param>
         /// <returns>If the command should be forwarded to other clients.</returns>
-        public static bool Parse(NetPacketReader reader, NetPeer peer, out bool useSequenced)
+        public static bool Parse(NetPacketReader reader, NetPeer peer, out bool useSequenced, out CommandBase cmd)
         {
-            Parse(reader, out CommandHandler handler, out CommandBase cmd);
+            Parse(reader, out CommandHandler handler, out cmd);
 
             useSequenced = false;
 
@@ -51,7 +52,7 @@ namespace CSM.Commands
         }
 
         /// <summary>
-        ///     Parse a sync envelope packet (TICK_SYNC, STATE_HASH, COMMAND_BATCH).
+        ///     Parse a sync envelope packet (TICK_SYNC, STATE_HASH).
         /// </summary>
         public static void ParseSyncPacket(byte[] data)
         {
@@ -66,38 +67,45 @@ namespace CSM.Commands
                 case SyncBatch.TYPE_STATE_HASH:
                     HandleStateHash(data);
                     break;
-
-                case SyncBatch.TYPE_COMMAND_BATCH:
-                    HandleCommandBatch(data);
-                    break;
             }
         }
 
-        // ── Shared command routing (used by Parse and HandleCommandBatch) ──
+        // ── Shared command routing ─────────────────────────
 
         /// <summary>
         ///     Route a command through the tick-sync buffer or immediate execution.
-        ///     Tick-synced commands are buffered for their target tick;
-        ///     all others go through the transaction handler or execute directly.
+        ///     On the server, tick-synced commands always execute immediately
+        ///     (the server is the authority and assigns target ticks during relay).
+        ///     On the client, tick-synced commands are buffered until their target tick.
+        ///     Non-tick-synced commands go through the transaction handler or execute directly.
         /// </summary>
-        private static void RouteCommand(CommandHandler handler, CommandBase cmd)
+        internal static void RouteCommand(CommandHandler handler, CommandBase cmd)
         {
             if (handler.RequiresTickSync && TickClock.IsInitialized)
             {
-                uint targetTick = cmd.TargetFrameIndex;
-
-                // If target tick is 0, it wasn't assigned (direct protobuf path).
-                // Assign a reasonable default: current tick + pipeline depth.
-                if (targetTick == 0)
+                // Server executes tick-synced commands immediately — it's the authority.
+                if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
                 {
-                    targetTick = TickClock.LocalTick + TickClock.PipelineDepth;
+                    // Fall through to transaction check / immediate execution.
                 }
+                else
+                {
+                    // Client: buffer for the target tick assigned by the server.
+                    uint targetTick = cmd.TargetFrameIndex;
 
-                bool buffered = CommandBuffer.Buffer(targetTick, handler, cmd, TickClock.LocalTick);
-                if (buffered)
-                    return;
+                    // If target tick is 0, it wasn't assigned (direct protobuf path).
+                    // Assign a reasonable default: current tick + pipeline depth.
+                    if (targetTick == 0)
+                    {
+                        targetTick = TickClock.LocalTick + TickClock.PipelineDepth;
+                    }
 
-                // Target tick already passed — fall through to immediate execution.
+                    bool buffered = CommandBuffer.Buffer(targetTick, handler, cmd, TickClock.LocalTick);
+                    if (buffered)
+                        return;
+
+                    // Target tick already passed — fall through to immediate execution.
+                }
             }
 
             // Transaction path or immediate execution
@@ -132,30 +140,6 @@ namespace CSM.Commands
             else
             {
                 Log.Debug($"[Sync] STATE_HASH verified at tick {pkt.HashTick}");
-            }
-        }
-
-        private static void HandleCommandBatch(byte[] data)
-        {
-            var pkt = SyncBatch.Parse(data);
-
-            foreach (var raw in pkt.Commands)
-            {
-                CommandBase cmd = Deserialize(raw.Payload);
-                if (cmd == null) continue;
-
-                cmd.SenderId = pkt.SenderId;
-                cmd.TargetFrameIndex = pkt.TargetTick;
-
-                CommandHandler handler = CommandInternal.Instance.GetCommandHandler(cmd.GetType());
-                if (handler == null) continue;
-
-                RouteCommand(handler, cmd);
-            }
-
-            if (pkt.IsLastBatch && pkt.TargetTick > 0)
-            {
-                CommandBuffer.MarkComplete(pkt.TargetTick);
             }
         }
 

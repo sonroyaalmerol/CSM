@@ -429,7 +429,7 @@ namespace CSM.Networking
                 else
                 {
                     // Legacy protobuf command (client doesn't relay, discard useSequenced)
-                    CommandReceiver.Parse(reader, peer, out bool discard);
+                    CommandReceiver.Parse(reader, peer, out bool discard, out CommandBase discardedCmd);
                 }
             }
             catch (Exception ex)
@@ -459,7 +459,8 @@ namespace CSM.Networking
                 Username = Config.Username,
                 ExpansionBitMask = DLCHelper.GetOwnedExpansions(),
                 ModderPackBitMask = DLCHelper.GetOwnedModderPacks(),
-                Mods = ModSupport.Instance.RequiredModsForSync
+                Mods = ModSupport.Instance.RequiredModsForSync,
+                ProtocolVersion = CommandBase.SyncProtocolVersion
             };
 
             Log.Info("Sending connection request to server...");

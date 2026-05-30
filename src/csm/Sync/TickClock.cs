@@ -44,12 +44,6 @@ namespace CSM.Sync
             get { return _serverTick + _pipelineDepth; }
         }
 
-        /// <summary>Whether the client can advance to the next tick.</summary>
-        public static bool CanAdvance
-        {
-            get { return _localTick < MaxAllowedTick; }
-        }
-
         /// <summary>Called when the simulation completes a tick.</summary>
         public static void Advance()
         {
@@ -78,12 +72,13 @@ namespace CSM.Sync
         /// <summary>
         ///     Calculate optimal pipeline depth based on network latency.
         ///     Higher latency → deeper pipeline to avoid stalls.
+        ///     Updates the stored PipelineDepth so the server uses it for relay stamping.
         /// </summary>
         public static uint CalculatePipelineDepth()
         {
             long maxLatency = GetMaxLatencyMs();
 
-            if (maxLatency <= 0) return DefaultPipelineDepth;
+            if (maxLatency <= 0) return _pipelineDepth;
 
             // Convert ms to ticks (60 ticks/sec → 16.6ms/tick)
             uint ticksForLatency = (uint)((maxLatency * 60) / 1000);
@@ -91,7 +86,11 @@ namespace CSM.Sync
             // Pipeline = 2x latency ticks + safety margin
             uint depth = ticksForLatency * 2 + 6;
 
-            return Math.Max(MinPipelineDepth, Math.Min(MaxPipelineDepth, depth));
+            depth = Math.Max(MinPipelineDepth, Math.Min(MaxPipelineDepth, depth));
+
+            // Store so relay stamping uses the same value sent in TICK_SYNC
+            _pipelineDepth = depth;
+            return depth;
         }
 
         /// <summary>Initialize the clock. Called on game load / connect.</summary>

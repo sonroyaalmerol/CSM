@@ -13,6 +13,13 @@ namespace CSM.API.Commands
     public abstract class CommandBase
     {
         /// <summary>
+        ///     Protocol version for the tick-sync extension. Bumped when the
+        ///     wire format or sync behavior changes incompatibly.
+        ///     Checked during connection handshake to prevent forked/vanilla
+        ///     client mismatches.
+        /// </summary>
+        public const int SyncProtocolVersion = 1;
+        /// <summary>
         ///     The id of the sending player. -1 for the server.
         /// </summary>
         [ProtoMember(1)]

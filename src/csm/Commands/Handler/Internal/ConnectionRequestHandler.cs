@@ -53,9 +53,23 @@ namespace CSM.Commands.Handler.Internal
                 return;
             }
 
-            // Check to see if the mod version matches
+            // Check mod version
             Version version = Assembly.GetAssembly(typeof(Client)).GetName().Version;
             string versionString = $"{version.Major}.{version.Minor}";
+
+            // Check tick-sync protocol version
+            if (command.ProtocolVersion != CommandBase.SyncProtocolVersion)
+            {
+                Log.Info($"Connection rejected: Protocol version {command.ProtocolVersion} (client) " +
+                         $"does not match {CommandBase.SyncProtocolVersion} (server).");
+                CommandInternal.Instance.SendToClient(peer, new ConnectionResultCommand
+                {
+                    Success = false,
+                    Reason = $"Tick-sync protocol mismatch. Client: {command.ProtocolVersion}, Server: {CommandBase.SyncProtocolVersion}. " +
+                             $"Ensure all players use the same CSM fork."
+                });
+                return;
+            }
 
             if (command.ModVersion != versionString)
             {
@@ -163,7 +177,8 @@ namespace CSM.Commands.Handler.Internal
             {
                 Success = true,
                 ClientId = peer.Id,
-                ServerToken = MultiplayerManager.Instance.CurrentServer.ServerToken
+                ServerToken = MultiplayerManager.Instance.CurrentServer.ServerToken,
+                ProtocolVersion = CommandBase.SyncProtocolVersion
             });
 
             PrepareWorldLoad(newPlayer);

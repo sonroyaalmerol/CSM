@@ -14,6 +14,13 @@ namespace CSM.Sync
     public static class FrameGate
     {
         /// <summary>
+        ///     True when the gate is currently closed (simulation stalled).
+        ///     Checked by SpeedPauseHelper to avoid interfering with pause
+        ///     negotiations while the tick gate is active.
+        /// </summary>
+        public static bool IsGateClosed { get; private set; }
+
+        /// <summary>
         ///     Called before each simulation tick.
         ///     Returns true if the simulation is allowed to advance one tick.
         ///     Returns false if the simulation should stall (frame gate closed).
@@ -21,7 +28,10 @@ namespace CSM.Sync
         public static bool CanAdvance()
         {
             if (!TickClock.IsInitialized)
+            {
+                IsGateClosed = false;
                 return true; // Not connected, run freely
+            }
 
             uint nextTick = TickClock.LocalTick + 1;
 
@@ -30,6 +40,7 @@ namespace CSM.Sync
             {
                 Log.Debug($"[FrameGate] Stalled at tick {TickClock.LocalTick}: " +
                           $"next={nextTick} > maxAllowed={TickClock.MaxAllowedTick}");
+                IsGateClosed = true;
                 return false;
             }
 
@@ -39,9 +50,11 @@ namespace CSM.Sync
             if (CommandBuffer.GetTickCommandCount(nextTick) > 0 && !CommandBuffer.IsReady(nextTick))
             {
                 Log.Debug($"[FrameGate] Waiting for tick {nextTick} commands to complete");
+                IsGateClosed = true;
                 return false;
             }
 
+            IsGateClosed = false;
             return true;
         }
 

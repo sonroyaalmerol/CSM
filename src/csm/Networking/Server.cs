@@ -14,6 +14,7 @@ using CSM.GS.Commands;
 using CSM.GS.Commands.Data.ApiServer;
 using CSM.Helpers;
 using CSM.Networking.Config;
+using CSM.Sync;
 using CSM.Util;
 using LiteNetLib;
 using ColossalFramework;
@@ -348,35 +349,44 @@ namespace CSM.Networking
                 // Check if this is a sync protocol packet
                 if (remaining.Length > 0 && remaining[0] < 0x08)
                 {
-                    // Sync protocol packet (TICK_SYNC from another server not expected,
-                    // but STATE_HASH from clients is valid)
                     CommandReceiver.ParseSyncPacket(remaining);
                     return;
                 }
 
-                // Parse this message
-                bool relayOnServer = CommandReceiver.Parse(reader, peer, out bool useSequenced);
+                // Parse, validate, and execute the command on the server.
+                bool relayOnServer = CommandReceiver.Parse(
+                    reader, peer, out bool useSequenced, out CommandBase cmd);
 
                 if (relayOnServer)
                 {
-                    // Copy relevant message part (exclude protocol headers)
-                    byte[] data = new byte[reader.UserDataSize];
-                    Array.Copy(reader.RawData, reader.UserDataOffset, data, 0, reader.UserDataSize);
-
+                    var handler = CommandInternal.Instance.GetCommandHandler(cmd.GetType());
                     var method = useSequenced
                         ? DeliveryMethod.ReliableSequenced
                         : DeliveryMethod.ReliableOrdered;
 
-                    // Send this message to all other clients
+                    byte[] relayData;
+
+                    if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
+                    {
+                        // Authoritative tick stamping: the server assigns the target tick
+                        // so all clients buffer the command for the same simulation frame.
+                        cmd.TargetFrameIndex = TickClock.LocalTick + TickClock.PipelineDepth;
+                        relayData = Serializer.Serialize(cmd);
+                    }
+                    else
+                    {
+                        // Non-tick-synced: relay the original bytes unchanged.
+                        relayData = new byte[reader.UserDataSize];
+                        Array.Copy(reader.RawData, reader.UserDataOffset, relayData, 0, reader.UserDataSize);
+                    }
+
+                    // Send to all other clients
                     List<NetPeer> peers = _netServer.ConnectedPeerList;
                     foreach (NetPeer client in peers)
                     {
-                        // Don't send the message back to the client that sent it.
                         if (client.Id == peer.Id)
                             continue;
-
-                        // Send the message so the other client can stay in sync
-                        client.Send(data, method);
+                        client.Send(relayData, method);
                     }
                 }
             }

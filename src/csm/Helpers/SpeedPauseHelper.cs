@@ -8,6 +8,7 @@ using CSM.Commands.Data.Game;
 using CSM.Commands.Handler.Game;
 using CSM.Commands.Handler.Internal;
 using CSM.Networking;
+using CSM.Sync;
 using UnityEngine;
 using Random = System.Random;
 
@@ -57,6 +58,13 @@ namespace CSM.Helpers
         /// </summary>
         public static void SimulationStep()
         {
+            // When the tick gate has paused the simulation, don't interfere with
+            // pause/speed negotiations. SpeedPauseHelper reads m_simulationPaused
+            // which the gate also sets — without this guard, the two systems would
+            // fight over the pause state in an infinite loop.
+            if (FrameGate.IsGateClosed)
+                return;
+
             // First tick in the game, initialize speed and pause state tracking variables
             if (!_initialized)
             {
