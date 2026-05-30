@@ -428,8 +428,8 @@ namespace CSM.Networking
                 }
                 else
                 {
-                    // Legacy protobuf command
-                    CommandReceiver.Parse(reader, peer);
+                    // Legacy protobuf command (client doesn't relay, discard useSequenced)
+                    CommandReceiver.Parse(reader, peer, out bool discard);
                 }
             }
             catch (Exception ex)

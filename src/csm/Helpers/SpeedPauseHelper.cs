@@ -217,8 +217,8 @@ namespace CSM.Helpers
         /// <param name="highestLatency">The highest latency of all responses.</param>
         public static void SpeedPauseResponseReceived(long highestGameTime, long highestLatency)
         {
-            // Pause time is computed by taking the highest game time plus 4 times the maximum latency because this
-            // is the worst case roundtrip time from client1 -> server -> client2 -> server -> client1 which means
+            // Pause time is computed by taking the highest game time plus 2 times the maximum latency because this
+            // is the worst case roundtrip time from client1 -> server -> client2 which means
             // that this amount of time may have already passed since the highest game time was determined.
             DateTime pauseTime = new DateTime(highestGameTime) + MillisecondsToInGameTime(highestLatency * 2);
             if (_state == SpeedPauseState.PauseRequested)
