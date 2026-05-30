@@ -16,15 +16,20 @@ namespace CSM.Commands
         /// </summary>
         /// <param name="reader">The incoming packet including the command type byte.</param>
         /// <param name="peer">The peer object of the sending client.</param>
+        /// <param name="useSequenced">Whether the relay should use ReliableSequenced delivery.</param>
         /// <returns>If the command should be forwarded to other clients.</returns>
-        public static bool Parse(NetPacketReader reader, NetPeer peer)
+        public static bool Parse(NetPacketReader reader, NetPeer peer, out bool useSequenced)
         {
             Parse(reader, out CommandHandler handler, out CommandBase cmd);
+
+            useSequenced = false;
 
             if (handler == null)
             {
                 return false;
             }
+
+            useSequenced = handler.UseSequencedDelivery;
 
             // Handle connection request as special case
             if (cmd.GetType() == typeof(ConnectionRequestCommand))

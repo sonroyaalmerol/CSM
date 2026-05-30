@@ -13,6 +13,7 @@ namespace CSM.Commands.Handler.Game
         public SpeedPauseReachedHandler()
         {
             TransactionCmd = false;
+            UseSequencedDelivery = true;
         }
 
         protected override void Handle(SpeedPauseReachedCommand command)

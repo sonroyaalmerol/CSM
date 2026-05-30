@@ -16,6 +16,27 @@ namespace CSM.Extensions
     {
         private DateTime _lastEconomyAndDropSync;
 
+        private static int GetLatencyAwareSyncIntervalMs()
+        {
+            long maxLatency = 0;
+            if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
+            {
+                maxLatency = MultiplayerManager.Instance.CurrentClient.ClientPlayer.Latency;
+            }
+            else if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server &&
+                     MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Count > 0)
+            {
+                foreach (var player in MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Values)
+                {
+                    if (player.Latency > maxLatency)
+                        maxLatency = player.Latency;
+                }
+            }
+
+            // Scale sync interval: faster sync at higher latency, clamped to [500ms, 2000ms]
+            return (int)Math.Max(500, Math.Min(2000, maxLatency * 3));
+        }
+
         public override void OnCreated(IThreading threading)
         {
             Singleton<MainThreadTracker>.Ensure();
@@ -47,8 +68,8 @@ namespace CSM.Extensions
 
         public override void OnAfterSimulationTick()
         {
-            // Send economy and frame drop packets every two seconds
-            if (DateTime.Now.Subtract(_lastEconomyAndDropSync).TotalSeconds > 2)
+            // Send economy and frame drop packets based on current latency
+            if (DateTime.Now.Subtract(_lastEconomyAndDropSync).TotalMilliseconds > GetLatencyAwareSyncIntervalMs())
             {
                 // Only send economy and dropped frames when connected
                 // (loading may accumulate dropped frames we need to ignore)

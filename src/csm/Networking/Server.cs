@@ -69,7 +69,11 @@ namespace CSM.Networking
             _netServer = new LiteNetLib.NetManager(listener)
             {
                 NatPunchEnabled = true,
-                UnconnectedMessagesEnabled = true
+                UnconnectedMessagesEnabled = true,
+                DisconnectTimeout = 30000,
+                PingInterval = 2000,
+                ReconnectDelay = 500,
+                MaxConnectAttempts = 20
             };
 
             // Listen to events
@@ -219,7 +223,12 @@ namespace CSM.Networking
             if (Status != ServerStatus.Running)
                 return;
 
-            _netServer.SendToAll(Serializer.Serialize(message), DeliveryMethod.ReliableOrdered);
+            var handler = CommandInternal.Instance.GetCommandHandler(message.GetType());
+            var method = handler != null && handler.UseSequencedDelivery
+                ? DeliveryMethod.ReliableSequenced
+                : DeliveryMethod.ReliableOrdered;
+
+            _netServer.SendToAll(Serializer.Serialize(message), method);
 
             Log.Debug($"Sending {message.GetType().Name} to all clients");
         }
@@ -232,7 +241,12 @@ namespace CSM.Networking
             if (Status != ServerStatus.Running)
                 return;
 
-            peer.Send(Serializer.Serialize(message), DeliveryMethod.ReliableOrdered);
+            var handler = CommandInternal.Instance.GetCommandHandler(message.GetType());
+            var method = handler != null && handler.UseSequencedDelivery
+                ? DeliveryMethod.ReliableSequenced
+                : DeliveryMethod.ReliableOrdered;
+
+            peer.Send(Serializer.Serialize(message), method);
 
             Log.Debug($"Sending {message.GetType().Name} to client at {peer.EndPoint.Address}:{peer.EndPoint.Port}");
         }
@@ -314,13 +328,17 @@ namespace CSM.Networking
             try
             {
                 // Parse this message
-                bool relayOnServer = CommandReceiver.Parse(reader, peer);
+                bool relayOnServer = CommandReceiver.Parse(reader, peer, out bool useSequenced);
 
                 if (relayOnServer)
                 {
                     // Copy relevant message part (exclude protocol headers)
                     byte[] data = new byte[reader.UserDataSize];
                     Array.Copy(reader.RawData, reader.UserDataOffset, data, 0, reader.UserDataSize);
+
+                    var method = useSequenced
+                        ? DeliveryMethod.ReliableSequenced
+                        : DeliveryMethod.ReliableOrdered;
 
                     // Send this message to all other clients
                     List<NetPeer> peers = _netServer.ConnectedPeerList;
@@ -331,7 +349,7 @@ namespace CSM.Networking
                             continue;
 
                         // Send the message so the other client can stay in sync
-                        client.Send(data, DeliveryMethod.ReliableOrdered);
+                        client.Send(data, method);
                     }
                 }
             }

@@ -62,7 +62,7 @@ namespace CSM.Helpers
         /// <param name="frames">The number of frames.</param>
         public static void AddDropFrames(int frames)
         {
-            int ticksUntil = (int) (10 * (1 / Time.fixedDeltaTime)); // 10 seconds * ticks per second (1/tick interval)
+            int ticksUntil = (int) (5 * (1 / Time.fixedDeltaTime)); // 5 seconds * ticks per second (1/tick interval)
             lock (_toDropLock)
             {
                 _framesToDrop += frames;
@@ -71,7 +71,7 @@ namespace CSM.Helpers
                     _dropInterval = ticksUntil / _framesToDrop;
                 }
             }
-            Log.Debug($"Dropping {_framesToDrop} frames in the next 10 seconds (drop every {_dropInterval} frames)");
+            Log.Debug($"Dropping {_framesToDrop} frames in the next 5 seconds (drop every {_dropInterval} frames)");
         }
 
         /// <summary>

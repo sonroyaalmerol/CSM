@@ -6,6 +6,11 @@ namespace CSM.BaseGame.Commands.Handler.Terrain
 {
     public class SoilTradeHandler : CommandHandler<SoilTradeCommand>
     {
+        public SoilTradeHandler()
+        {
+            TransactionCmd = false;
+            UseSequencedDelivery = true;
+        }
         protected override void Handle(SoilTradeCommand command)
         {
             IgnoreHelper.Instance.StartIgnore();

@@ -3,14 +3,28 @@ using System.Collections.Generic;
 using CSM.API;
 using CSM.API.Commands;
 using CSM.Commands.Data.Internal;
-using CSM.Container;
 
 namespace CSM.Commands
 {
     public static class TransactionHandler
     {
+        /// <summary>
+        ///     Maximum number of simulation ticks a transaction can remain queued
+        ///     before it is considered stale and cleaned up.
+        /// </summary>
+        private const int MaxTransactionAge = 600; // ~10 seconds at 60 ticks/sec
+
         private static bool _sendStarted = false;
-        private static readonly List<Tuple<CommandHandler, CommandBase, int>> _receivedTransactions = new List<Tuple<CommandHandler, CommandBase, int>>();
+        private static readonly List<PendingTransaction> _receivedTransactions = new List<PendingTransaction>();
+        private static int _tickCounter = 0;
+
+        private class PendingTransaction
+        {
+            public CommandHandler Handler;
+            public CommandBase Command;
+            public int SenderId;
+            public int QueuedAtTick;
+        }
 
         /// <summary>
         /// Starts a transaction.
@@ -34,9 +48,22 @@ namespace CSM.Commands
 
         /// <summary>
         /// Finishes all transactions that were started before.
+        /// Also performs per-tick cleanup of stale transactions.
         /// </summary>
         public static void FinishSend()
         {
+            _tickCounter++;
+
+            // Clean up stale transactions that never received a FinishTransactionCommand
+            if (_tickCounter % 60 == 0)
+            {
+                int removed = _receivedTransactions.RemoveAll(t => _tickCounter - t.QueuedAtTick > MaxTransactionAge);
+                if (removed > 0)
+                {
+                    Log.Warn($"Cleaned up {removed} stale transactions that timed out without a FinishTransactionCommand.");
+                }
+            }
+
             if (_sendStarted)
             {
                 CommandInternal.Instance.SendToAll(new FinishTransactionCommand());
@@ -58,7 +85,13 @@ namespace CSM.Commands
                 return false;
             }
 
-            _receivedTransactions.Add(new Tuple<CommandHandler, CommandBase, int>(handler, cmd, cmd.SenderId));
+            _receivedTransactions.Add(new PendingTransaction
+            {
+                Handler = handler,
+                Command = cmd,
+                SenderId = cmd.SenderId,
+                QueuedAtTick = _tickCounter
+            });
 
             return true;
         }
@@ -69,24 +102,26 @@ namespace CSM.Commands
         /// <param name="sender">The sending player, -1 if it's the server.</param>
         public static void FinishReceived(int sender)
         {
-            foreach (Tuple<CommandHandler, CommandBase, int> transaction in _receivedTransactions)
+            // Process from the end to allow removal during iteration
+            for (int i = _receivedTransactions.Count - 1; i >= 0; i--)
             {
-                if (transaction.Var3 != sender)
+                PendingTransaction transaction = _receivedTransactions[i];
+                if (transaction.SenderId != sender)
                 {
                     continue;
                 }
 
                 try
                 {
-                    transaction.Var1.Parse(transaction.Var2);
+                    transaction.Handler.Parse(transaction.Command);
                 }
                 catch (Exception ex)
                 {
-                    Log.Error($"Exception while parsing {transaction.Var2.GetType().Name}", ex);
+                    Log.Error($"Exception while parsing {transaction.Command.GetType().Name}", ex);
                 }
-            }
 
-            ClearTransactions(sender);
+                _receivedTransactions.RemoveAt(i);
+            }
         }
 
         /// <summary>
@@ -95,7 +130,7 @@ namespace CSM.Commands
         /// <param name="clientId">The sender's client id.</param>
         public static void ClearTransactions(int clientId)
         {
-            _receivedTransactions.RemoveAll(tuple => tuple.Var3 == clientId);
+            _receivedTransactions.RemoveAll(t => t.SenderId == clientId);
         }
 
         /// <summary>

@@ -220,7 +220,7 @@ namespace CSM.Helpers
             // Pause time is computed by taking the highest game time plus 4 times the maximum latency because this
             // is the worst case roundtrip time from client1 -> server -> client2 -> server -> client1 which means
             // that this amount of time may have already passed since the highest game time was determined.
-            DateTime pauseTime = new DateTime(highestGameTime) + MillisecondsToInGameTime(highestLatency * 4);
+            DateTime pauseTime = new DateTime(highestGameTime) + MillisecondsToInGameTime(highestLatency * 2);
             if (_state == SpeedPauseState.PauseRequested)
             {
                 _state = SpeedPauseState.WaitingForPause;

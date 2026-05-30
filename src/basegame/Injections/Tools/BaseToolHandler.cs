@@ -9,6 +9,7 @@ namespace CSM.BaseGame.Injections.Tools
         protected BaseToolCommandHandler()
         {
             TransactionCmd = false;
+            UseSequencedDelivery = true;
         }
 
         protected override void Handle(Cmd command)

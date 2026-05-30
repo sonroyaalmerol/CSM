@@ -71,7 +71,11 @@ namespace CSM.Networking
             _netClient = new LiteNetLib.NetManager(listener)
             {
                 NatPunchEnabled = true,
-                UnconnectedMessagesEnabled = true
+                UnconnectedMessagesEnabled = true,
+                DisconnectTimeout = 30000,
+                PingInterval = 2000,
+                ReconnectDelay = 500,
+                MaxConnectAttempts = 20
             };
 
             // Listen to events
@@ -373,7 +377,12 @@ namespace CSM.Networking
 
             Log.Debug($"Sending {message.GetType().Name} to server");
 
-            server.Send(Serializer.Serialize(message), DeliveryMethod.ReliableOrdered);
+            var handler = CommandInternal.Instance.GetCommandHandler(message.GetType());
+            var method = handler != null && handler.UseSequencedDelivery
+                ? DeliveryMethod.ReliableSequenced
+                : DeliveryMethod.ReliableOrdered;
+
+            server.Send(Serializer.Serialize(message), method);
         }
 
         /// <summary>

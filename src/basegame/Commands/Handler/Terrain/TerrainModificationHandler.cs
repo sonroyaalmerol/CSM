@@ -8,6 +8,11 @@ namespace CSM.BaseGame.Commands.Handler.Terrain
 {
     public class TerrainModificationHandler : CommandHandler<TerrainModificationCommand>
     {
+        public TerrainModificationHandler()
+        {
+            TransactionCmd = false;
+            UseSequencedDelivery = true;
+        }
         protected override void Handle(TerrainModificationCommand command)
         {
             TerrainTool tool = Singleton<ToolSimulator>.instance.GetTool<TerrainTool>(command.SenderId);

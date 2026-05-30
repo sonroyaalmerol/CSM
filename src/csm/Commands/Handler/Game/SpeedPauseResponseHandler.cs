@@ -15,6 +15,7 @@ namespace CSM.Commands.Handler.Game
         public SpeedPauseResponseHandler()
         {
             TransactionCmd = false;
+            UseSequencedDelivery = true;
             ResetValues();
         }
         
