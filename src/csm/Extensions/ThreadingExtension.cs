@@ -59,9 +59,11 @@ namespace CSM.Extensions
             }
 
             // ── Frame gate ─────────────────────────────────
-            // If tick-sync is active and the frame gate says we can't advance,
-            // skip this simulation tick by re-pausing.
-            if (TickClock.IsInitialized && !FrameGate.CanAdvance())
+            // Only clients are gated — the server is the tick authority and
+            // advances freely. Clients must wait for the server's pipeline window.
+            if (TickClock.IsInitialized &&
+                MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client &&
+                !FrameGate.CanAdvance())
             {
                 // Signal the tick loop to skip this frame
                 ReflectionHelper.SetAttr(SimulationManager.instance, "m_simulationPaused", true);
@@ -71,10 +73,18 @@ namespace CSM.Extensions
         public override void OnAfterSimulationTick()
         {
             // ── Execute buffered tick-synced commands ──────
-            // Execute all commands that were buffered for the tick we just completed.
             if (TickClock.IsInitialized)
             {
-                FrameGate.ExecuteTick(TickClock.LocalTick);
+                if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
+                {
+                    // Clients: drain and execute buffered commands, then advance tick
+                    FrameGate.ExecuteTick(TickClock.LocalTick);
+                }
+                else
+                {
+                    // Server: just advance the tick (no command buffer on server)
+                    TickClock.Advance();
+                }
 
                 // ── Periodic tick sync (server broadcasts tick position) ──
                 if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
