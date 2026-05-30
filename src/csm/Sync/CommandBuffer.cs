@@ -57,12 +57,31 @@ namespace CSM.Sync
 
             int idx = (int)(targetTick & RING_MASK);
 
-            // Guard against ring collision (extremely unlikely with 256-slot ring).
-            // If the slot is still marked complete from a previous rotation, clear it.
+            // Guard against ring collision: if the slot is still occupied by a
+            // command from a previous rotation (targetTick differs by >= RING_SIZE),
+            // the pipeline has stalled for over 4 seconds. Drop the stale command
+            // with a warning — it's from a tick so old it can never execute correctly.
             ref TickSlot slot = ref _ring[idx];
-            if (slot.Commands != null && slot.Complete)
+            if (slot.Commands != null && slot.Commands.Count > 0)
             {
-                slot.Commands.Clear();
+                // Check for wrap-around collision: if the distance exceeds RING_SIZE,
+                // the slot belongs to a tick from a previous rotation.
+                // This should never happen in normal operation (MaxPipelineDepth=60 << 256)
+                // but guards against pathological network stalls.
+                int distance = (int)(targetTick - currentTick);
+                if (distance >= RING_SIZE)
+                {
+                    Log.Warn($"[CommandBuffer] Target tick {targetTick} is {distance} ticks ahead — " +
+                             $"exceeds ring size {RING_SIZE}. Dropping stale slot and buffering.");
+                    TotalBuffered -= slot.Commands.Count;
+                    slot.Commands.Clear();
+                    slot.Complete = false;
+                }
+            }
+
+            // Clear completed flag from previous rotation
+            if (slot.Complete)
+            {
                 slot.Complete = false;
             }
 

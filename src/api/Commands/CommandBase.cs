@@ -29,6 +29,13 @@ namespace CSM.API.Commands
         ///     The simulation tick at which this command should be executed.
         ///     Assigned by the server during relay. 0 = execute immediately
         ///     (used for non-tick-synced meta-commands).
+        ///
+        ///     Backward compatibility: [ProtoMember(2)] is additive — vanilla CSM
+        ///     clients that don't have this field will silently default to 0,
+        ///     which causes tick-synced commands to execute immediately.
+        ///     This is why the protocol version handshake exists: vanilla clients
+        ///     are rejected at connection time with a clear error message, so they
+        ///     never reach a state where TargetFrameIndex=0 would cause problems.
         /// </summary>
         [ProtoMember(2)]
         public uint TargetFrameIndex { get; set; }

@@ -414,14 +414,9 @@ namespace CSM.Networking
         {
             try
             {
-                // Peek first byte to check if this is a sync protocol packet
-                // Sync packets use the top bit pattern 0-2 for type, while
-                // protobuf always starts with field tag (1-15 for field 1).
-                // Sync types 0-2 occupy bits 0-2, with bit 3+ as flags.
-                // Protobuf field tags for field 1 with wire type 0 (varint) are 0x08.
-                // So any byte < 0x08 is a sync packet.
+                // Check if this is a sync protocol packet (0xFE magic byte)
                 byte[] remaining = reader.GetRemainingBytes();
-                if (remaining.Length > 0 && remaining[0] < 0x08)
+                if (SyncBatch.IsSyncPacket(remaining))
                 {
                     // Sync protocol packet
                     CommandReceiver.ParseSyncPacket(remaining);

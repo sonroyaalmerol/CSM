@@ -136,10 +136,12 @@ namespace CSM.Commands
                 Log.Warn($"[Sync] STATE_HASH MISMATCH at tick {pkt.HashTick}: " +
                          $"ours=0x{ourHash:X16}, theirs=0x{pkt.StateHash:X16}, " +
                          $"sender={pkt.SenderId}");
+                DesyncDetector.OnHashMismatch(pkt.HashTick, ourHash, pkt.StateHash, pkt.SenderId);
             }
             else
             {
                 Log.Debug($"[Sync] STATE_HASH verified at tick {pkt.HashTick}");
+                DesyncDetector.OnHashMatch(pkt.HashTick);
             }
         }
 

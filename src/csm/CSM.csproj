@@ -99,7 +99,6 @@
 		<Compile Include="Commands\Handler\Internal\WorldTransferHandler.cs" />
 		<Compile Include="Container\ChatCommand.cs" />
 		<Compile Include="Container\ChirperMessage.cs" />
-		<Compile Include="Container\Tuple.cs" />
 		<Compile Include="Extensions\LoadingExtension.cs" />
 		<Compile Include="Extensions\ThreadingExtension.cs" />
 		<Compile Include="GS\Commands\ApiCommand.cs" />
@@ -177,6 +176,7 @@
 		<Compile Include="Sync\FrameGate.cs" />
 		<Compile Include="Sync\StateHasher.cs" />
 		<Compile Include="Sync\SyncBatch.cs" />
+		<Compile Include="Sync\DesyncDetector.cs" />
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="LiteNetLib">

@@ -6,32 +6,42 @@ namespace CSM.Util
 {
     public static class Serializer
     {
-        // Reusable MemoryStream to avoid allocating a new one per serialize call.
-        // This reduces GC pressure, especially under high-latency command batching.
-        private static readonly MemoryStream _stream = new MemoryStream(4096);
-        private static readonly object _serializeLock = new object();
+        /// <summary>
+        ///     Thread-local pooled MemoryStream to avoid allocating a new one per
+        ///     serialize call while remaining safe for multi-threaded use.
+        ///     Cities: Skylines is single-threaded for simulation but the
+        ///     thread-local guards against any unexpected cross-thread calls.
+        /// </summary>
+        [System.ThreadStatic]
+        private static MemoryStream _tlsStream;
+
+        private static MemoryStream GetStream()
+        {
+            if (_tlsStream == null)
+                _tlsStream = new MemoryStream(4096);
+            return _tlsStream;
+        }
 
         /// <summary>
         ///     Serializes the command into a byte array for sending over the network.
-        ///     Uses a pooled MemoryStream to reduce GC allocations.
+        ///     Uses a thread-local pooled MemoryStream to reduce GC allocations
+        ///     without lock contention.
         /// </summary>
         /// <returns>A byte array containing the message.</returns>
         public static byte[] Serialize(CommandBase cmd)
         {
-            lock (_serializeLock)
-            {
-                _stream.SetLength(0);
-                _stream.Position = 0;
+            MemoryStream stream = GetStream();
+            stream.SetLength(0);
+            stream.Position = 0;
 
-                CommandInternal.Instance.Model.Serialize(_stream, cmd);
+            CommandInternal.Instance.Model.Serialize(stream, cmd);
 
-                // Copy the written portion — ToArray() returns the full underlying buffer,
-                // so we use GetBuffer() + length instead.
-                int length = (int)_stream.Position;
-                byte[] result = new byte[length];
-                System.Buffer.BlockCopy(_stream.GetBuffer(), 0, result, 0, length);
-                return result;
-            }
+            // Copy the written portion — ToArray() returns the full underlying buffer,
+            // so we use GetBuffer() + length instead.
+            int length = (int)stream.Position;
+            byte[] result = new byte[length];
+            System.Buffer.BlockCopy(stream.GetBuffer(), 0, result, 0, length);
+            return result;
         }
     }
 }

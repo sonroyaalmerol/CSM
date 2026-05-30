@@ -143,6 +143,7 @@ namespace CSM.Networking
             CurrentRole = MultiplayerRole.None;
             TickClock.Reset();
             CommandBuffer.Clear();
+            DesyncDetector.Reset();
         }
         
         /// <summary>

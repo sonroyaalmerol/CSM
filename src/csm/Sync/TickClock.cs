@@ -9,6 +9,11 @@ namespace CSM.Sync
     ///     pipeline window: [serverTick .. serverTick + pipelineDepth].
     ///     Clients must not advance past serverTick + pipelineDepth.
     ///     Commands are buffered and executed at their target tick.
+    ///
+    ///     Tick continuity: ticks reset to 0 on server restart.
+    ///     All clients must reconnect after a server crash/restart.
+    ///     Tick values are unsigned and monotonically increasing within
+    ///     a session — they wrap at uint.MaxValue (~2 years at 60fps).
     /// </summary>
     public static class TickClock
     {
@@ -32,6 +37,14 @@ namespace CSM.Sync
         public static uint ServerTick { get { return _serverTick; } }
 
         /// <summary>How many ticks ahead of server we're allowed to run.</summary>
+        /// <remarks>
+        ///     Write contract:
+        ///     - Server: set by CalculatePipelineDepth() based on max client latency.
+        ///       This value is sent to clients via TICK_SYNC.
+        ///     - Client: set by OnServerTick() from the server's TICK_SYNC packet.
+        ///       Clients never call CalculatePipelineDepth().
+        ///     The server is the sole authority for pipeline depth.
+        /// </remarks>
         public static uint PipelineDepth
         {
             get { return _pipelineDepth; }
@@ -72,7 +85,9 @@ namespace CSM.Sync
         /// <summary>
         ///     Calculate optimal pipeline depth based on network latency.
         ///     Higher latency → deeper pipeline to avoid stalls.
-        ///     Updates the stored PipelineDepth so the server uses it for relay stamping.
+        ///     Only called by the server — stores the result so relay
+        ///     stamping uses the same value sent in TICK_SYNC.
+        ///     Clients receive the server's depth via OnServerTick().
         /// </summary>
         public static uint CalculatePipelineDepth()
         {

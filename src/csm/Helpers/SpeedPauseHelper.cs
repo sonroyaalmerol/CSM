@@ -58,11 +58,11 @@ namespace CSM.Helpers
         /// </summary>
         public static void SimulationStep()
         {
-            // When the tick gate has paused the simulation, don't interfere with
-            // pause/speed negotiations. SpeedPauseHelper reads m_simulationPaused
-            // which the gate also sets — without this guard, the two systems would
-            // fight over the pause state in an infinite loop.
-            if (FrameGate.IsGateClosed)
+            // When the tick gate or desync detector has paused the simulation,
+            // don't interfere with pause/speed negotiations. SpeedPauseHelper reads
+            // m_simulationPaused which both systems also set — without this guard,
+            // the systems would fight over the pause state in an infinite loop.
+            if (FrameGate.IsGateClosed || DesyncDetector.IsDesyncPaused)
                 return;
 
             // First tick in the game, initialize speed and pause state tracking variables

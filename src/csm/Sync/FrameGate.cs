@@ -10,6 +10,24 @@ namespace CSM.Sync
     ///       1. We haven't exceeded the server's max allowed tick
     ///       2. The command buffer for the next tick is ready
     ///     If conditions aren't met, the simulation pauses naturally.
+    ///
+    ///     Coupling contract with SpeedPauseHelper and DesyncDetector:
+    ///     ──────────────────────────────────────────────────────────
+    ///     Three systems can set m_simulationPaused:
+    ///       1. FrameGate (tick-sync stall)          → IsGateClosed
+    ///       2. DesyncDetector (hash mismatch)       → IsDesyncPaused
+    ///       3. SpeedPauseHelper (speed/pause UI)    → no flag
+    ///
+    ///     SpeedPauseHelper.SimulationStep() checks both IsGateClosed and
+    ///     IsDesyncPaused before negotiating pause/speed changes. This prevents
+    ///     the systems from fighting over the pause state.
+    ///
+    ///     Execution order matters:
+    ///       1. SpeedPauseHelper.SimulationStep() runs in SimulationStep (before tick)
+    ///       2. FrameGate.CanAdvance() runs in OnUpdate (before simulation step)
+    ///       3. DesyncDetector.OnHashMismatch() runs in HandleStateHash (network thread)
+    ///     Since all run on the main thread (LiteNetLib polls inline),
+    ///     there is no concurrent access to m_simulationPaused.
     /// </summary>
     public static class FrameGate
     {

@@ -8,6 +8,11 @@ namespace CSM.Sync
     ///
     ///     Packet layout:
     ///     ┌─────────────────────────────────────────────────┐
+    ///     │ [1 byte] Magic marker 0xFE                       │
+    ///     │   Protobuf field tags never produce 0xFE as the  │
+    ///     │   first byte (wire type 6 is reserved/invalid),  │
+    ///     │   so this is an unambiguous discriminator.       │
+    ///     ├─────────────────────────────────────────────────┤
     ///     │ [1 byte] Header flags                            │
     ///     │   bits 0-2: packet type                          │
     ///     │     0 = COMMAND_BATCH (reserved, not yet used)  │
@@ -37,9 +42,22 @@ namespace CSM.Sync
     ///     may relay multiple commands for a tick in a single envelope.
     ///     Currently all commands are relayed individually with an
     ///     authoritative TargetFrameIndex stamped by the server.
+    ///
+    ///     Discriminator rationale:
+    ///       The magic byte 0xFE is chosen because protobuf field tags
+    ///       encode as (field_number << 3 | wire_type). Wire types are
+    ///       0-5. For a single-byte tag (field 1-15), the range is
+    ///       0x08-0x7D. Multi-byte tags start at 0x80. 0xFE as a tag
+    ///       would decode as wire type 6 (0xFE & 0x07 = 6), which is
+    ///       reserved and never produced by any valid protobuf encoder.
     /// </summary>
     public static class SyncBatch
     {
+        // ── Magic byte ─────────────────────────────────────
+        // Protobuf never produces 0xFE as a first byte because wire type 6
+        // is reserved/invalid in the protobuf encoding spec.
+        public const byte SYNC_MAGIC = 0xFE;
+
         // ── Packet type constants ──────────────────────────
         public const byte TYPE_COMMAND_BATCH = 0; // Reserved
         public const byte TYPE_TICK_SYNC = 1;
@@ -54,17 +72,28 @@ namespace CSM.Sync
         // Pooled writer to avoid allocation per packet.
         private static readonly SyncWriter _pooledWriter = new SyncWriter(256);
 
+        /// <summary>
+        ///     Check whether a raw byte array is a sync protocol packet.
+        ///     Uses the 0xFE magic byte for unambiguous identification.
+        ///     Safe to call on any incoming packet before attempting protobuf parse.
+        /// </summary>
+        public static bool IsSyncPacket(byte[] data)
+        {
+            return data != null && data.Length > 0 && data[0] == SYNC_MAGIC;
+        }
+
         // ── Build: TICK_SYNC (server → clients) ────────────
 
         /// <summary>
         ///     Build a TICK_SYNC packet. Sent by the server periodically
         ///     to tell clients how far they're allowed to advance.
-        ///     Total size: typically 3-6 bytes.
+        ///     Total size: typically 4-7 bytes.
         /// </summary>
         public static byte[] BuildTickSync(uint serverTick, uint pipelineDepth)
         {
             var w = _pooledWriter;
             w.Reset();
+            w.WriteByte(SYNC_MAGIC);
             byte header = TYPE_TICK_SYNC | FLAG_HAS_PIPELINE_DEPTH;
             w.WriteByte(header);
             w.WriteVarInt(serverTick);
@@ -76,12 +105,13 @@ namespace CSM.Sync
 
         /// <summary>
         ///     Build a STATE_HASH packet. Sent every HashInterval ticks.
-        ///     Total size: typically 11-13 bytes.
+        ///     Total size: typically 12-14 bytes.
         /// </summary>
         public static byte[] BuildStateHash(uint tick, ulong hash, int senderId)
         {
             var w = _pooledWriter;
             w.Reset();
+            w.WriteByte(SYNC_MAGIC);
             byte header = TYPE_STATE_HASH | FLAG_HAS_TARGET_TICK | FLAG_HAS_SENDER_ID;
             w.WriteByte(header);
             w.WriteVarInt(tick);
@@ -94,11 +124,20 @@ namespace CSM.Sync
 
         /// <summary>
         ///     Parse a sync packet. Returns a ParsedPacket with the type and data.
+        ///     Expects the 0xFE magic byte to be present at position 0.
         /// </summary>
         public static ParsedPacket Parse(byte[] data)
         {
             var r = new SyncReader(data);
             var result = new ParsedPacket();
+
+            // Skip magic byte
+            byte magic = r.ReadByte();
+            if (magic != SYNC_MAGIC)
+            {
+                Log.Error($"[SyncBatch] Invalid magic byte: 0x{magic:X2}, expected 0x{SYNC_MAGIC:X2}");
+                return result;
+            }
 
             // Header byte
             byte header = r.ReadByte();
@@ -150,10 +189,15 @@ namespace CSM.Sync
 
         // ── Header inspection ──────────────────────────────
 
-        /// <summary>Quickly determine the type of a sync packet (read 1 byte, no allocation).</summary>
+        /// <summary>
+        ///     Quickly determine the type of a sync packet (reads header byte
+        ///     at index 1, skipping magic byte). No allocation.
+        /// </summary>
         public static byte PeekType(byte[] data)
         {
-            return (byte)(data[0] & FLAG_TYPE_MASK);
+            if (data == null || data.Length < 2 || data[0] != SYNC_MAGIC)
+                return 0xFF; // Invalid
+            return (byte)(data[1] & FLAG_TYPE_MASK);
         }
     }
 }

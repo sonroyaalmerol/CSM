@@ -346,8 +346,8 @@ namespace CSM.Networking
             {
                 byte[] remaining = reader.GetRemainingBytes();
 
-                // Check if this is a sync protocol packet
-                if (remaining.Length > 0 && remaining[0] < 0x08)
+                // Check if this is a sync protocol packet (0xFE magic byte)
+                if (SyncBatch.IsSyncPacket(remaining))
                 {
                     CommandReceiver.ParseSyncPacket(remaining);
                     return;
