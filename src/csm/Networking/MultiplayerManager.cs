@@ -7,6 +7,7 @@ using CSM.API.Commands;
 using CSM.API.Networking.Status;
 using CSM.Networking.Config;
 using CSM.Panels;
+using CSM.Sync;
 
 namespace CSM.Networking
 {
@@ -140,6 +141,8 @@ namespace CSM.Networking
                     break;
             }
             CurrentRole = MultiplayerRole.None;
+            TickClock.Reset();
+            CommandBuffer.Clear();
         }
         
         /// <summary>

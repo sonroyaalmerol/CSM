@@ -12,6 +12,7 @@ namespace CSM.Commands.Handler.Internal
         {
             RelayOnServer = false;
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(ClientLevelLoadedCommand command)

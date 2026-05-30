@@ -327,6 +327,17 @@ namespace CSM.Networking
         {
             try
             {
+                byte[] remaining = reader.GetRemainingBytes();
+
+                // Check if this is a sync protocol packet
+                if (remaining.Length > 0 && remaining[0] < 0x08)
+                {
+                    // Sync protocol packet (TICK_SYNC from another server not expected,
+                    // but STATE_HASH from clients is valid)
+                    CommandReceiver.ParseSyncPacket(remaining);
+                    return;
+                }
+
                 // Parse this message
                 bool relayOnServer = CommandReceiver.Parse(reader, peer, out bool useSequenced);
 

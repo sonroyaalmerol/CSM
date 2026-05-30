@@ -10,6 +10,7 @@ namespace CSM.BaseGame.Commands.Handler.Terrain
         {
             TransactionCmd = false;
             UseSequencedDelivery = true;
+            RequiresTickSync = false;
         }
         protected override void Handle(SoilTradeCommand command)
         {

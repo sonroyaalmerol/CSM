@@ -10,6 +10,7 @@ namespace CSM.Commands.Handler.Internal
         {
             TransactionCmd = false;
             UseSequencedDelivery = true;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(SlowdownCommand command)

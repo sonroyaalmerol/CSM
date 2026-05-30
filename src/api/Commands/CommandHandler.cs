@@ -23,6 +23,15 @@ namespace CSM.API.Commands
         /// </summary>
         public bool UseSequencedDelivery { get; protected set; } = false;
 
+        /// <summary>
+        ///     If true, this command is buffered by the tick-sync system and executed
+        ///     at a server-assigned target tick. This guarantees all clients execute
+        ///     the command at the same simulation tick, preventing desync.
+        ///     Set to false for meta-commands (connection, speed/pause, cursor display)
+        ///     that must execute immediately upon receipt.
+        /// </summary>
+        public bool RequiresTickSync { get; protected set; } = true;
+
         public abstract Type GetDataType();
 
         public abstract void Parse(CommandBase message);

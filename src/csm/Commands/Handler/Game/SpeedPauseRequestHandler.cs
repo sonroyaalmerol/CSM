@@ -11,6 +11,7 @@ namespace CSM.Commands.Handler.Game
         {
             TransactionCmd = false;
             UseSequencedDelivery = true;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(SpeedPauseRequestCommand command)

@@ -12,6 +12,7 @@ namespace CSM.Commands.Handler.Internal
         public ClientConnectHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(ClientConnectCommand command)

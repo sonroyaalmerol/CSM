@@ -12,6 +12,7 @@ using CSM.Injections;
 using CSM.Mods;
 using CSM.Networking;
 using CSM.Panels;
+using CSM.Sync;
 using ICities;
 using Object = UnityEngine.Object;
 
@@ -84,7 +85,9 @@ namespace CSM.Extensions
             SlowdownHelper.ClearDropFrames();
             SlowdownHelper.ClearLocalDropFrames();
 
-            // TODO: Check if we need to reset more caches
+            // Initialize the tick sync clock
+            TickClock.Initialize(0);
+            CommandBuffer.Clear();
         }
 
         public override void OnLevelUnloading()

@@ -18,6 +18,7 @@ namespace CSM.Commands.Handler.Internal
         public ConnectionResultHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(ConnectionResultCommand command)

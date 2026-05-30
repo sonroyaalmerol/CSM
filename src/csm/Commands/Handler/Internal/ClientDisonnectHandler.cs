@@ -15,6 +15,7 @@ namespace CSM.Commands.Handler.Internal
         public ClientDisconnectHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(ClientDisconnectCommand command)

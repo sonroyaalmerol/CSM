@@ -51,6 +51,18 @@ namespace CSM.Networking
         public Player ClientPlayer { get; set; } = new Player();
 
         /// <summary>
+        ///     Gets the server NetPeer if connected, or null.
+        /// </summary>
+        public LiteNetLib.NetPeer ServerPeer
+        {
+            get
+            {
+                var peers = _netClient?.ConnectedPeerList;
+                return (peers != null && peers.Count > 0) ? peers[0] : null;
+            }
+        }
+
+        /// <summary>
         ///     If the status is disconnected, this will contain
         ///     the reason why.
         /// </summary>
@@ -402,7 +414,23 @@ namespace CSM.Networking
         {
             try
             {
-                CommandReceiver.Parse(reader, peer);
+                // Peek first byte to check if this is a sync protocol packet
+                // Sync packets use the top bit pattern 0-2 for type, while
+                // protobuf always starts with field tag (1-15 for field 1).
+                // Sync types 0-2 occupy bits 0-2, with bit 3+ as flags.
+                // Protobuf field tags for field 1 with wire type 0 (varint) are 0x08.
+                // So any byte < 0x08 is a sync packet.
+                byte[] remaining = reader.GetRemainingBytes();
+                if (remaining.Length > 0 && remaining[0] < 0x08)
+                {
+                    // Sync protocol packet
+                    CommandReceiver.ParseSyncPacket(remaining);
+                }
+                else
+                {
+                    // Legacy protobuf command
+                    CommandReceiver.Parse(reader, peer);
+                }
             }
             catch (Exception ex)
             {

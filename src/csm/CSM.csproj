@@ -171,6 +171,12 @@
 		<Compile Include="Properties\AssemblyInfo.cs" />
 		<Compile Include="Util\CSMWebClient.cs" />
 		<Compile Include="Util\Serializer.cs" />
+		<Compile Include="Sync\SyncStream.cs" />
+		<Compile Include="Sync\TickClock.cs" />
+		<Compile Include="Sync\CommandBuffer.cs" />
+		<Compile Include="Sync\FrameGate.cs" />
+		<Compile Include="Sync\StateHasher.cs" />
+		<Compile Include="Sync\SyncBatch.cs" />
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="LiteNetLib">

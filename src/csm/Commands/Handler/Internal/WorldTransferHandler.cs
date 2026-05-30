@@ -14,6 +14,7 @@ namespace CSM.Commands.Handler.Internal
         public WorldTransferHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(WorldTransferCommand command)

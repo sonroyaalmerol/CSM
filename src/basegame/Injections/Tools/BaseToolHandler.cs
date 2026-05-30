@@ -10,6 +10,7 @@ namespace CSM.BaseGame.Injections.Tools
         {
             TransactionCmd = false;
             UseSequencedDelivery = true;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(Cmd command)

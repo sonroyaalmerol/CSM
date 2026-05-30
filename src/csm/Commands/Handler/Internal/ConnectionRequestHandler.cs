@@ -23,6 +23,7 @@ namespace CSM.Commands.Handler.Internal
         public ConnectionRequestHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
             RelayOnServer = false;
         }
 

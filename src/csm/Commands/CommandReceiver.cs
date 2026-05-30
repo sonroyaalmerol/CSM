@@ -4,6 +4,7 @@ using CSM.API.Commands;
 using CSM.Commands.Data.Internal;
 using CSM.Commands.Handler.Internal;
 using CSM.Networking;
+using CSM.Sync;
 using LiteNetLib;
 
 namespace CSM.Commands
@@ -45,14 +46,131 @@ namespace CSM.Commands
                 return false;
             }
 
+            // ── Tick-sync buffer path ──────────────────────
+            // If this command requires tick sync and we're connected,
+            // buffer it for execution at the assigned target tick.
+            if (handler.RequiresTickSync && TickClock.IsInitialized)
+            {
+                uint targetTick = cmd.TargetFrameIndex;
+
+                // If target tick is 0, it wasn't assigned yet (direct protobuf path).
+                // Assign a reasonable default: current tick + pipeline depth.
+                if (targetTick == 0)
+                {
+                    targetTick = TickClock.LocalTick + TickClock.PipelineDepth;
+                }
+
+                bool buffered = CommandBuffer.Buffer(targetTick, handler, cmd, TickClock.LocalTick);
+
+                if (buffered)
+                {
+                    // Command was buffered for future execution. Still relay if needed.
+                    return handler.RelayOnServer;
+                }
+                // Target tick already passed — fall through to immediate execution.
+                // This handles the case where the command arrived late.
+            }
+
+            // ── Transaction path (non-tick-synced commands) ──
             if (TransactionHandler.CheckReceived(handler, cmd))
             {
                 return handler.RelayOnServer;
             }
 
+            // ── Immediate execution ────────────────────────
             handler.Parse(cmd);
 
             return handler.RelayOnServer;
+        }
+
+        /// <summary>
+        ///     Parse a sync envelope packet. Used by the new SyncBatch wire format.
+        ///     Handles TICK_SYNC, STATE_HASH, and COMMAND_BATCH packets.
+        /// </summary>
+        public static void ParseSyncPacket(byte[] data)
+        {
+            byte type = SyncBatch.PeekType(data);
+
+            switch (type)
+            {
+                case SyncBatch.TYPE_TICK_SYNC:
+                    HandleTickSync(data);
+                    break;
+
+                case SyncBatch.TYPE_STATE_HASH:
+                    HandleStateHash(data);
+                    break;
+
+                case SyncBatch.TYPE_COMMAND_BATCH:
+                    HandleCommandBatch(data);
+                    break;
+            }
+        }
+
+        // ── Sync packet handlers ───────────────────────────
+
+        private static void HandleTickSync(byte[] data)
+        {
+            var pkt = SyncBatch.Parse(data);
+            TickClock.OnServerTick(pkt.ServerTick, pkt.PipelineDepth);
+            Log.Debug($"[Sync] TICK_SYNC: serverTick={pkt.ServerTick}, " +
+                      $"pipeline={pkt.PipelineDepth}, maxAllowed={TickClock.MaxAllowedTick}");
+        }
+
+        private static void HandleStateHash(byte[] data)
+        {
+            var pkt = SyncBatch.Parse(data);
+
+            // Compute our own hash at the same tick
+            ulong ourHash = StateHasher.ComputeHash();
+
+            if (ourHash != pkt.StateHash)
+            {
+                Log.Warn($"[Sync] STATE_HASH MISMATCH at tick {pkt.HashTick}: " +
+                         $"ours=0x{ourHash:X16}, theirs=0x{pkt.StateHash:X16}, " +
+                         $"sender={pkt.SenderId}");
+            }
+            else
+            {
+                Log.Debug($"[Sync] STATE_HASH verified at tick {pkt.HashTick}");
+            }
+        }
+
+        private static void HandleCommandBatch(byte[] data)
+        {
+            var pkt = SyncBatch.Parse(data);
+
+            foreach (var raw in pkt.Commands)
+            {
+                // Deserialize the protobuf payload
+                CommandBase cmd = Deserialize(raw.Payload);
+                if (cmd == null) continue;
+
+                cmd.SenderId = pkt.SenderId;
+                cmd.TargetFrameIndex = pkt.TargetTick;
+
+                CommandHandler handler = CommandInternal.Instance.GetCommandHandler(cmd.GetType());
+                if (handler == null) continue;
+
+                // Buffer or execute based on tick-sync requirement
+                if (handler.RequiresTickSync && TickClock.IsInitialized)
+                {
+                    CommandBuffer.Buffer(pkt.TargetTick, handler, cmd, TickClock.LocalTick);
+                }
+                else
+                {
+                    // Non-tick-synced: execute immediately
+                    if (TransactionHandler.CheckReceived(handler, cmd))
+                        continue;
+                    handler.Parse(cmd);
+                }
+            }
+
+            // If this is the last batch for this tick, mark it complete
+            if (pkt.IsLastBatch && pkt.TargetTick > 0)
+            {
+                CommandBuffer.MarkComplete(pkt.TargetTick);
+            }
         }
 
         /// <summary>
@@ -81,7 +199,7 @@ namespace CSM.Commands
         /// </summary>
         /// <param name="message">A byte array of the message</param>
         /// <returns>The deserialized command.</returns>
-        private static CommandBase Deserialize(byte[] message)
+        public static CommandBase Deserialize(byte[] message)
         {
             CommandBase result;
 

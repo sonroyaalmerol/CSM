@@ -17,5 +17,13 @@ namespace CSM.API.Commands
         /// </summary>
         [ProtoMember(1)]
         public int SenderId { get; set; }
+
+        /// <summary>
+        ///     The simulation tick at which this command should be executed.
+        ///     Assigned by the server during relay. 0 = execute immediately
+        ///     (used for non-tick-synced meta-commands).
+        /// </summary>
+        [ProtoMember(2)]
+        public uint TargetFrameIndex { get; set; }
     }
 }
