@@ -51,6 +51,11 @@ namespace CSM.Sync
     ///       would decode as wire type 6 (0xFE & 0x07 = 6), which is
     ///       reserved and never produced by any valid protobuf encoder.
     /// </summary>
+    ///     Thread safety: all SyncWriter/SyncReader operations are expected to
+    ///     run on the main Unity thread (LiteNetLib polls inline in
+    ///     ThreadingExtension.OnUpdate). The pooled writer uses a runtime
+    ///     assertion to catch misuse if called from a background thread.
+    /// </summary>
     public static class SyncBatch
     {
         // ── Magic byte ─────────────────────────────────────
@@ -70,7 +75,13 @@ namespace CSM.Sync
         private const byte FLAG_HAS_PIPELINE_DEPTH = 0x20;
 
         // Pooled writer to avoid allocation per packet.
+        // Thread safety: all callers run on the main thread. The assertion
+        // below catches accidental cross-thread use during development.
         private static readonly SyncWriter _pooledWriter = new SyncWriter(256);
+
+        // Expected thread ID captured at class init. Used for debug assertions
+        // to catch accidental use from background threads.
+        private static readonly int _ownerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
 
         /// <summary>
         ///     Check whether a raw byte array is a sync protocol packet.
@@ -91,6 +102,7 @@ namespace CSM.Sync
         /// </summary>
         public static byte[] BuildTickSync(uint serverTick, uint pipelineDepth)
         {
+            AssertMainThread();
             var w = _pooledWriter;
             w.Reset();
             w.WriteByte(SYNC_MAGIC);
@@ -104,11 +116,12 @@ namespace CSM.Sync
         // ── Build: STATE_HASH (bidirectional) ──────────────
 
         /// <summary>
-        ///     Build a STATE_HASH packet. Sent every HashInterval ticks.
+        ///     Build a STATE_HASH packet. Sent every ~1 second (time-based interval).
         ///     Total size: typically 12-14 bytes.
         /// </summary>
         public static byte[] BuildStateHash(uint tick, ulong hash, int senderId)
         {
+            AssertMainThread();
             var w = _pooledWriter;
             w.Reset();
             w.WriteByte(SYNC_MAGIC);
@@ -198,6 +211,26 @@ namespace CSM.Sync
             if (data == null || data.Length < 2 || data[0] != SYNC_MAGIC)
                 return 0xFF; // Invalid
             return (byte)(data[1] & FLAG_TYPE_MASK);
+        }
+
+        // ── Thread safety assertion ───────────────────────
+
+        /// <summary>
+        ///     Asserts that the current thread is the same thread that
+        ///     initialized the class. The pooled writer is not thread-safe
+        ///     by design — all network processing runs on the main thread.
+        ///     This catches accidental use from background threads.
+        /// </summary>
+        [System.Diagnostics.Conditional("DEBUG")]
+        private static void AssertMainThread()
+        {
+            int current = System.Threading.Thread.CurrentThread.ManagedThreadId;
+            if (current != _ownerThreadId)
+            {
+                Log.Error($"[SyncBatch] Thread safety violation: pooled writer accessed " +
+                          $"from thread {current}, expected {_ownerThreadId}. " +
+                          $"All sync packet building must happen on the main thread.");
+            }
         }
     }
 }

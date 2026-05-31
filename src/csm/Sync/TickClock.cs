@@ -27,7 +27,7 @@ namespace CSM.Sync
         // Minimum pipeline depth in ticks. At 60fps, 1 tick ≈ 16.6ms.
         // We want at least 2 round-trips of buffer for safety.
         private const uint MinPipelineDepth = 12;  // ~200ms
-        private const uint MaxPipelineDepth = 60;  // ~1000ms
+        private const uint MaxPipelineDepth = 180; // ~3000ms (supports up to ~750ms one-way)
         private const uint DefaultPipelineDepth = 20; // ~333ms
 
         /// <summary>This client's current simulation tick.</summary>

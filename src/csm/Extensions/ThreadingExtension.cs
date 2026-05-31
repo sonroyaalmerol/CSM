@@ -17,10 +17,14 @@ namespace CSM.Extensions
     {
         private DateTime _lastEconomyAndDropSync;
         private DateTime _lastTickSync;
-        private uint _lastHashTick;
+        private DateTime _lastHashSendTime;
 
         // Tick sync interval: send TICK_SYNC every 200ms (12 ticks at 60fps)
         private const int TickSyncIntervalMs = 200;
+
+        // State hash send interval: time-based rather than tick-based so
+        // hashes are sent even when simulation is paused (desync recovery).
+        private const int HashSendIntervalMs = 1000;
 
         private static int GetLatencyAwareSyncIntervalMs()
         {
@@ -68,6 +72,31 @@ namespace CSM.Extensions
                 // Signal the tick loop to skip this frame
                 ReflectionHelper.SetAttr(SimulationManager.instance, "m_simulationPaused", true);
             }
+
+            // ── Periodic sync (runs every frame, even when paused) ──
+            // OnAfterSimulationTick doesn't fire when paused, so we must
+            // handle tick sync and state hash here to ensure desync
+            // detection and recovery can work during pause-induced stalls.
+            if (TickClock.IsInitialized && MultiplayerManager.Instance.IsConnected())
+            {
+                // Server: broadcast tick sync
+                if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
+                {
+                    if (DateTime.Now.Subtract(_lastTickSync).TotalMilliseconds > TickSyncIntervalMs)
+                    {
+                        SendTickSync();
+                        _lastTickSync = DateTime.Now;
+                    }
+                }
+
+                // State hash: send periodically even when paused so desync
+                // detection and recovery can complete.
+                if (DateTime.Now.Subtract(_lastHashSendTime).TotalMilliseconds > HashSendIntervalMs)
+                {
+                    _lastHashSendTime = DateTime.Now;
+                    SendStateHash();
+                }
+            }
         }
 
         public override void OnAfterSimulationTick()
@@ -84,23 +113,6 @@ namespace CSM.Extensions
                 {
                     // Server: just advance the tick (no command buffer on server)
                     TickClock.Advance();
-                }
-
-                // ── Periodic tick sync (server broadcasts tick position) ──
-                if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
-                {
-                    if (DateTime.Now.Subtract(_lastTickSync).TotalMilliseconds > TickSyncIntervalMs)
-                    {
-                        SendTickSync();
-                        _lastTickSync = DateTime.Now;
-                    }
-                }
-
-                // ── Periodic state hash verification ────────
-                if (StateHasher.ShouldHash(TickClock.LocalTick) && TickClock.LocalTick != _lastHashTick)
-                {
-                    _lastHashTick = TickClock.LocalTick;
-                    SendStateHash();
                 }
             }
 
