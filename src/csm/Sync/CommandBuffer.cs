@@ -70,17 +70,21 @@ namespace CSM.Sync
                 }
                 else
                 {
-                    // Deduplication: check if this command type is already buffered for this tick.
-                    // Handles redundant retransmissions from the Outbox system.
-                    string cmdType = cmd.GetType().Name;
-                    for (int i = 0; i < slot.Commands.Count; i++)
+                    // Deduplication: check if this exact command (same SendSeq)
+                    // is already buffered for this tick. Handles redundant
+                    // retransmissions from the Outbox without dropping different
+                    // commands of the same type from the same sender.
+                    if (cmd.SendSeq != 0)
                     {
-                        if (slot.Commands[i].Command.GetType().Name == cmdType &&
-                            slot.Commands[i].Command.SenderId == cmd.SenderId)
+                        for (int i = 0; i < slot.Commands.Count; i++)
                         {
-                            Log.Debug($"[CommandBuffer] Duplicate {cmdType} from sender {cmd.SenderId} " +
-                                      $"for tick {targetTick} — dropping redundant retransmission.");
-                            return false;
+                            if (slot.Commands[i].Command.SendSeq == cmd.SendSeq)
+                            {
+                                Log.Debug($"[CommandBuffer] Duplicate {cmd.GetType().Name} " +
+                                          $"(seq={cmd.SendSeq}) from sender {cmd.SenderId} " +
+                                          $"for tick {targetTick} — dropping redundant retransmission.");
+                                return false;
+                            }
                         }
                     }
                 }

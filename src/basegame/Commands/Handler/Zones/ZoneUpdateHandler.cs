@@ -8,7 +8,9 @@ namespace CSM.BaseGame.Commands.Handler.Zones
     {
         public ZoneUpdateHandler()
         {
+            TransactionCmd = false;
             UseSequencedDelivery = true;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(ZoneUpdateCommand command)

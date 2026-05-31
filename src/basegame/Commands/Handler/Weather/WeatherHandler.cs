@@ -8,7 +8,9 @@ namespace CSM.BaseGame.Commands.Handler.Weather
     {
         public WeatherHandler()
         {
+            TransactionCmd = false;
             UseSequencedDelivery = true;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(WeatherCommand command)

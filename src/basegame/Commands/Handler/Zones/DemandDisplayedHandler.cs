@@ -7,7 +7,9 @@ namespace CSM.BaseGame.Commands.Handler.Zones
     {
         public DemandDisplayedHandler()
         {
+            TransactionCmd = false;
             UseSequencedDelivery = true;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(DemandDisplayedCommand command)

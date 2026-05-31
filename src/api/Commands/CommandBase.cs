@@ -18,7 +18,7 @@ namespace CSM.API.Commands
         ///     Checked during connection handshake to prevent forked/vanilla
         ///     client mismatches.
         /// </summary>
-        public const int SyncProtocolVersion = 1;
+        public const int SyncProtocolVersion = 2;
         /// <summary>
         ///     The id of the sending player. -1 for the server.
         /// </summary>
@@ -39,5 +39,16 @@ namespace CSM.API.Commands
         /// </summary>
         [ProtoMember(2)]
         public uint TargetFrameIndex { get; set; }
+
+        /// <summary>
+        ///     Monotonic sequence counter per sender, used for deduplication
+        ///     of redundant retransmissions in the command buffer. Each send
+        ///     increments the counter, so two different commands from the
+        ///     same sender will have different SendSeq values, while a
+        ///     retransmitted copy will have the same SendSeq.
+        ///     0 = not assigned (treated as unique, never deduped).
+        /// </summary>
+        [ProtoMember(3)]
+        public uint SendSeq { get; set; }
     }
 }

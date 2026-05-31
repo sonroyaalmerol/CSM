@@ -361,6 +361,7 @@ namespace CSM.Networking
                         // Authoritative tick stamping: the server assigns the target tick
                         // so all clients buffer the command for the same simulation frame.
                         cmd.TargetFrameIndex = TickClock.LocalTick + TickClock.PipelineDepth;
+                        CommandInternal.AssignSendSeq(cmd);
                         relayData = Serializer.Serialize(cmd);
                     }
                     else

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using CSM.API;
 using CSM.API.Commands;
 using CSM.API.Networking;
@@ -22,6 +23,23 @@ namespace CSM.Commands
     public class CommandInternal
     {
         public static CommandInternal Instance;
+
+        /// <summary>
+        ///     Monotonic send sequence counter. Assigned to each outgoing
+        ///     command before serialization for deduplication of redundant
+        ///     retransmissions. Thread-safe via Interlocked.
+        /// </summary>
+        private static int _nextSendSeq;
+
+        /// <summary>
+        ///     Assign a unique send sequence number to a command.
+        ///     Called before serialization so the sequence is embedded in
+        ///     the wire format for deduplication on the receiver side.
+        /// </summary>
+        internal static void AssignSendSeq(CommandBase cmd)
+        {
+            cmd.SendSeq = (uint)Interlocked.Increment(ref _nextSendSeq);
+        }
 
         private readonly Dictionary<Type, CommandHandler> _cmdMapping = new Dictionary<Type, CommandHandler>();
 
@@ -82,6 +100,7 @@ namespace CSM.Commands
 
             if (tickSynced)
             {
+                AssignSendSeq(command);
                 data = Serializer.Serialize(command);
                 Outbox.RecordSent(command, data);
             }
@@ -127,6 +146,7 @@ namespace CSM.Commands
 
             if (tickSynced)
             {
+                AssignSendSeq(command);
                 data = Serializer.Serialize(command);
                 Outbox.RecordSent(command, data);
             }
