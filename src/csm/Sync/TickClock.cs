@@ -174,10 +174,18 @@ namespace CSM.Sync
         /// </summary>
         public static uint CalculatePipelineDepth()
         {
-            // Use the EWMA-smoothed latency (already updated by LiteNetLib callbacks).
-            // Do NOT call UpdateLatencySample here — that would create duplicate
-            // samples between LiteNetLib events and bias the EWMA.
-            double latencyMs = _ewmaInitialized ? _smoothedMaxLatencyMs : GetMaxLatencyMs();
+            long rawLatency = GetMaxLatencyMs();
+
+            // Feed max latency into EWMA — exactly once per TICK_SYNC interval.
+            // On the server, GetMaxLatencyMs() returns the max across all clients.
+            // On the client, it returns the single server latency.
+            // This avoids duplicate samples from per-peer LiteNetLib callbacks.
+            if (rawLatency > 0)
+            {
+                UpdateLatencySample(rawLatency);
+            }
+
+            double latencyMs = _ewmaInitialized ? _smoothedMaxLatencyMs : rawLatency;
 
             if (latencyMs <= 0) return _pipelineDepth;
 

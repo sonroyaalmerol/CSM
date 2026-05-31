@@ -158,6 +158,16 @@ namespace CSM.Networking
             {
                 CurrentClient.Disconnect(false);
                 CurrentRole = MultiplayerRole.None;
+
+                // Clean up tick sync systems for unexpected disconnects.
+                // StopEverything() handles clean disconnects, but
+                // StopClientOnDisconnect() is called on connection loss
+                // where the full cleanup path is skipped.
+                TickClock.Reset();
+                CommandBuffer.Clear();
+                Outbox.Clear();
+                DesyncDetector.Reset();
+                StateHashHandler.Reset();
             }
         }
 

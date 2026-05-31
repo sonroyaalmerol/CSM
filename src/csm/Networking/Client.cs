@@ -527,9 +527,9 @@ namespace CSM.Networking
         private void ListenerOnNetworkLatencyUpdateEvent(NetPeer peer, int latency)
         {
             ClientPlayer.Latency = latency;
-
-            // Feed latency sample into EWMA for adaptive pipeline depth
-            TickClock.UpdateLatencySample(latency);
+            // Note: EWMA update is NOT needed on the client because
+            // CalculatePipelineDepth() is server-only. The client
+            // receives PipelineDepth from the server's TICK_SYNC.
         }
 
         public void StartMainMenuEventProcessor()

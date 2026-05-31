@@ -31,6 +31,15 @@ namespace CSM.Sync
     public static class FrameGate
     {
         /// <summary>
+        ///     Maximum time the gate can be continuously closed before
+        ///     emitting a warning. Prevents log spam at 60fps.
+        /// </summary>
+        private static readonly TimeSpan StallWarningInterval = TimeSpan.FromSeconds(5);
+
+        private static DateTime _stallStartTime;
+        private static bool _stallWarned;
+
+        /// <summary>
         ///     True when the gate is currently closed (simulation stalled).
         ///     Checked by SpeedPauseHelper to avoid interfering with pause
         ///     negotiations while the tick gate is active.
@@ -69,8 +78,22 @@ namespace CSM.Sync
             // Don't run ahead of the server's pipeline window
             if (nextTick > TickClock.MaxAllowedTick)
             {
-                Log.Debug($"[FrameGate] Stalled at tick {TickClock.LocalTick}: " +
-                          $"next={nextTick} > maxAllowed={TickClock.MaxAllowedTick}");
+                if (!IsGateClosed)
+                {
+                    // Gate just closed
+                    _stallStartTime = DateTime.Now;
+                    _stallWarned = false;
+                    Log.Debug($"[FrameGate] Stalled at tick {TickClock.LocalTick}: " +
+                              $"next={nextTick} > maxAllowed={TickClock.MaxAllowedTick}");
+                }
+                else if (!_stallWarned && DateTime.Now - _stallStartTime > StallWarningInterval)
+                {
+                    // Stalled for too long — escalate to warning
+                    _stallWarned = true;
+                    Log.Warn($"[FrameGate] Stalled for {StallWarningInterval.TotalSeconds}s at tick {TickClock.LocalTick}. " +
+                             $"Server tick={TickClock.ServerTick}, pipeline={TickClock.PipelineDepth}. " +
+                             $"Check network connection.");
+                }
                 IsGateClosed = true;
                 return false;
             }
