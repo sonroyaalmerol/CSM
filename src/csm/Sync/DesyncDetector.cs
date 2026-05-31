@@ -1,5 +1,4 @@
 using System;
-using ColossalFramework;
 using CSM.API;
 using CSM.API.Commands;
 using CSM.Commands.Data.Internal;
@@ -184,11 +183,7 @@ namespace CSM.Sync
         {
             try
             {
-                var chat = Singleton<Chat>.instance;
-                if (chat != null)
-                {
-                    chat.PrintGameMessage(Chat.MessageType.Warning, message);
-                }
+                Chat.Instance.PrintGameMessage(Chat.MessageType.Warning, message);
             }
             catch { }
         }
