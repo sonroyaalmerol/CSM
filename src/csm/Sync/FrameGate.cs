@@ -24,7 +24,7 @@ namespace CSM.Sync
     ///     Execution order matters:
     ///       1. SpeedPauseHelper.SimulationStep() runs in OnBeforeSimulationTick (top)
     ///       2. FrameGate.CanAdvance() runs in OnBeforeSimulationTick (after SpeedPause)
-    ///       3. DesyncDetector.OnHashMismatch() runs in ParseSyncPacket (network receive)
+    ///       3. DesyncDetector.OnHashMismatch() runs in StateHashHandler (network receive)
     ///     Since all run on the main thread (LiteNetLib polls inline),
     ///     there is no concurrent access to m_simulationPaused.
     /// </summary>

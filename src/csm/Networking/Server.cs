@@ -253,22 +253,6 @@ namespace CSM.Networking
         }
 
         /// <summary>
-        ///     Send a raw byte array to all connected clients.
-        ///     Used by the sync protocol for TICK_SYNC and STATE_HASH packets.
-        /// </summary>
-        public void SendRawToAll(byte[] data, DeliveryMethod method)
-        {
-            if (Status != ServerStatus.Running)
-                return;
-
-            List<NetPeer> peers = _netServer.ConnectedPeerList;
-            foreach (NetPeer client in peers)
-            {
-                client.Send(data, method);
-            }
-        }
-
-        /// <summary>
         ///     Polls new events from the clients.
         /// </summary>
         public void ProcessEvents()
@@ -344,15 +328,6 @@ namespace CSM.Networking
         {
             try
             {
-                byte[] remaining = reader.GetRemainingBytes();
-
-                // Check if this is a sync protocol packet (0xFE magic byte)
-                if (SyncBatch.IsSyncPacket(remaining))
-                {
-                    CommandReceiver.ParseSyncPacket(remaining);
-                    return;
-                }
-
                 // Parse, validate, and execute the command on the server.
                 bool relayOnServer = CommandReceiver.Parse(
                     reader, peer, out bool useSequenced, out CommandBase cmd);

@@ -6,11 +6,11 @@ using CSM.API.Networking.Status;
 using CSM.API.Commands;
 using CSM.BaseGame.Injections;
 using CSM.Commands;
+using CSM.Commands.Data.Sync;
 using CSM.Helpers;
 using CSM.Networking;
 using CSM.Sync;
 using ICities;
-using LiteNetLib;
 
 namespace CSM.Extensions
 {
@@ -157,8 +157,11 @@ namespace CSM.Extensions
         private void SendTickSync()
         {
             uint depth = TickClock.CalculatePipelineDepth();
-            byte[] packet = SyncBatch.BuildTickSync(TickClock.LocalTick, depth);
-            MultiplayerManager.Instance.CurrentServer.SendRawToAll(packet, DeliveryMethod.ReliableSequenced);
+            Command.SendToClients(new TickSyncCommand
+            {
+                ServerTick = TickClock.LocalTick,
+                PipelineDepth = depth
+            });
         }
 
         // ── State hash broadcast ───────────────────────────
@@ -172,20 +175,12 @@ namespace CSM.Extensions
                 senderId = MultiplayerManager.Instance.CurrentClient.ClientId;
             }
 
-            byte[] packet = SyncBatch.BuildStateHash(TickClock.LocalTick, hash, senderId);
-
-            if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
+            Command.SendToAll(new StateHashCommand
             {
-                MultiplayerManager.Instance.CurrentServer.SendRawToAll(packet, DeliveryMethod.Unreliable);
-            }
-            else
-            {
-                var serverPeer = MultiplayerManager.Instance.CurrentClient.ServerPeer;
-                if (serverPeer != null)
-                {
-                    serverPeer.Send(packet, DeliveryMethod.Unreliable);
-                }
-            }
+                Tick = TickClock.LocalTick,
+                Hash = hash,
+                SenderId = senderId
+            });
         }
     }
 

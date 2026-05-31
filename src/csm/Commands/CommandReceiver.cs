@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using CSM.API;
 using CSM.API.Commands;
 using CSM.Commands.Data.Internal;
@@ -51,25 +51,6 @@ namespace CSM.Commands
             return handler.RelayOnServer;
         }
 
-        /// <summary>
-        ///     Parse a sync envelope packet (TICK_SYNC, STATE_HASH).
-        /// </summary>
-        public static void ParseSyncPacket(byte[] data)
-        {
-            byte type = SyncBatch.PeekType(data);
-
-            switch (type)
-            {
-                case SyncBatch.TYPE_TICK_SYNC:
-                    HandleTickSync(data);
-                    break;
-
-                case SyncBatch.TYPE_STATE_HASH:
-                    HandleStateHash(data);
-                    break;
-            }
-        }
-
         // ── Shared command routing ─────────────────────────
 
         /// <summary>
@@ -113,36 +94,6 @@ namespace CSM.Commands
                 return;
 
             handler.Parse(cmd);
-        }
-
-        // ── Sync packet handlers ───────────────────────────
-
-        private static void HandleTickSync(byte[] data)
-        {
-            var pkt = SyncBatch.Parse(data);
-            TickClock.OnServerTick(pkt.ServerTick, pkt.PipelineDepth);
-            Log.Debug($"[Sync] TICK_SYNC: serverTick={pkt.ServerTick}, " +
-                      $"pipeline={pkt.PipelineDepth}, maxAllowed={TickClock.MaxAllowedTick}");
-        }
-
-        private static void HandleStateHash(byte[] data)
-        {
-            var pkt = SyncBatch.Parse(data);
-
-            ulong ourHash = StateHasher.ComputeHash();
-
-            if (ourHash != pkt.StateHash)
-            {
-                Log.Warn($"[Sync] STATE_HASH MISMATCH at tick {pkt.HashTick}: " +
-                         $"ours=0x{ourHash:X16}, theirs=0x{pkt.StateHash:X16}, " +
-                         $"sender={pkt.SenderId}");
-                DesyncDetector.OnHashMismatch(pkt.HashTick, ourHash, pkt.StateHash, pkt.SenderId);
-            }
-            else
-            {
-                Log.Debug($"[Sync] STATE_HASH verified at tick {pkt.HashTick}");
-                DesyncDetector.OnHashMatch(pkt.HashTick);
-            }
         }
 
         // ── Deserialization ────────────────────────────────

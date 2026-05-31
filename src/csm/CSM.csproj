@@ -72,6 +72,8 @@
 		<Compile Include="Commands\Data\Internal\ClientLevelLoadedCommand.cs" />
 		<Compile Include="Commands\Data\Game\SpeedPauseResponseCommand.cs" />
 		<Compile Include="Commands\Data\Game\SpeedPauseRequestCommand.cs" />
+		<Compile Include="Commands\Data\Sync\TickSyncCommand.cs" />
+		<Compile Include="Commands\Data\Sync\StateHashCommand.cs" />
 		<Compile Include="Commands\Data\Internal\ChatMessageCommand.cs" />
 		<Compile Include="Commands\Data\Internal\ClientConnectCommand.cs" />
 		<Compile Include="Commands\Data\Internal\ClientDisconnectCommand.cs" />
@@ -85,6 +87,8 @@
 		<Compile Include="Commands\Handler\Game\SpeedPauseReachedHandler.cs" />
 		<Compile Include="Commands\Handler\Game\SpeedPauseResponseHandler.cs" />
 		<Compile Include="Commands\Handler\Game\SpeedPauseRequestHandler.cs" />
+		<Compile Include="Commands\Handler\Sync\TickSyncHandler.cs" />
+		<Compile Include="Commands\Handler\Sync\StateHashHandler.cs" />
 		<Compile Include="Commands\Handler\Internal\ChatMessageHandler.cs" />
 		<Compile Include="Commands\Handler\Internal\ClientConnectHandler.cs" />
 		<Compile Include="Commands\Handler\Internal\ClientDisonnectHandler.cs" />
@@ -170,12 +174,12 @@
 		<Compile Include="Properties\AssemblyInfo.cs" />
 		<Compile Include="Util\CSMWebClient.cs" />
 		<Compile Include="Util\Serializer.cs" />
-		<Compile Include="Sync\SyncStream.cs" />
+
 		<Compile Include="Sync\TickClock.cs" />
 		<Compile Include="Sync\CommandBuffer.cs" />
 		<Compile Include="Sync\FrameGate.cs" />
 		<Compile Include="Sync\StateHasher.cs" />
-		<Compile Include="Sync\SyncBatch.cs" />
+
 		<Compile Include="Sync\DesyncDetector.cs" />
 	</ItemGroup>
 	<ItemGroup>

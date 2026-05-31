@@ -18,7 +18,6 @@ using CSM.Helpers;
 using CSM.Mods;
 using CSM.Networking.Config;
 using CSM.Util;
-using CSM.Sync;
 using LiteNetLib;
 
 namespace CSM.Networking
@@ -415,18 +414,7 @@ namespace CSM.Networking
         {
             try
             {
-                // Check if this is a sync protocol packet (0xFE magic byte)
-                byte[] remaining = reader.GetRemainingBytes();
-                if (SyncBatch.IsSyncPacket(remaining))
-                {
-                    // Sync protocol packet
-                    CommandReceiver.ParseSyncPacket(remaining);
-                }
-                else
-                {
-                    // Legacy protobuf command (client doesn't relay, discard useSequenced)
-                    CommandReceiver.Parse(reader, peer, out bool discard, out CommandBase discardedCmd);
-                }
+                CommandReceiver.Parse(reader, peer, out bool discard, out CommandBase discardedCmd);
             }
             catch (Exception ex)
             {
