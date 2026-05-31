@@ -60,9 +60,14 @@ namespace CSM.Sync
 
         /// <summary>
         ///     Whether the EWMA has received its first sample.
-        ///     Until then, CalculatePipelineDepth uses the raw value.
         /// </summary>
         private static bool _ewmaInitialized;
+
+        /// <summary>
+        ///     Whether we've received the first TICK_SYNC from the server.
+        ///     Used to snap the local tick to the server tick on first sync.
+        /// </summary>
+        private static bool _serverTickReceived;
 
         /// <summary>
         ///     The last pipeline depth we computed. Used to rate-limit
@@ -109,9 +114,22 @@ namespace CSM.Sync
         /// <summary>
         ///     Called when a TICK_SYNC arrives from the server.
         ///     Updates our knowledge of the server's tick position.
+        ///     On the first TICK_SYNC after initialization, snaps the
+        ///     local tick to the server tick so we start in sync.
         /// </summary>
         public static void OnServerTick(uint serverTick, uint pipelineDepth)
         {
+            // On the first TICK_SYNC, snap local tick to server tick.
+            // Without this, a client connecting mid-game would start at
+            // tick 0 while the server is at tick 100000+, causing all
+            // buffered commands to be far in the future and never executed.
+            if (!_serverTickReceived)
+            {
+                _localTick = serverTick;
+                _serverTickReceived = true;
+                Log.Info($"[TickClock] First TICK_SYNC: snapped local tick to {serverTick}");
+            }
+
             _serverTick = serverTick;
             _pipelineDepth = pipelineDepth;
 
@@ -202,6 +220,7 @@ namespace CSM.Sync
             _lastComputedDepth = DefaultPipelineDepth;
             _smoothedMaxLatencyMs = 0;
             _ewmaInitialized = false;
+            _serverTickReceived = false;
             _initialized = true;
             Log.Info($"[TickClock] Initialized at tick {startTick}, pipeline depth {DefaultPipelineDepth}");
         }
@@ -215,6 +234,7 @@ namespace CSM.Sync
             _lastComputedDepth = DefaultPipelineDepth;
             _smoothedMaxLatencyMs = 0;
             _ewmaInitialized = false;
+            _serverTickReceived = false;
             _initialized = false;
         }
 
