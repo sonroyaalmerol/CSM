@@ -25,6 +25,12 @@ namespace CSM.Sync
         private const ulong FnvOffset = 14695981039346656037UL;
         private const ulong FnvPrime = 1099511628211UL;
 
+        // Tick-based cache: avoid recomputing when multiple hashes arrive
+        // within the same simulation tick (common on server with N players).
+        private static uint _cacheVersion;
+        private static ulong _cachedHash;
+        private static SubsystemHashEntry[] _cachedSubsystems;
+
         /// <summary>
         ///     Subsystem IDs matching the indices in StateHashCommand.
         /// </summary>
@@ -63,6 +69,14 @@ namespace CSM.Sync
         /// </summary>
         public static ulong ComputeHash()
         {
+            // Cache key: currentBuildIndex increments every simulation tick.
+            // Multiple StateHashHandler invocations within the same tick
+            // (e.g., 4 players' hashes arriving on the same server frame)
+            // return the cached result instead of recomputing.
+            uint version = (uint)SimulationManager.instance.m_currentBuildIndex;
+            if (version == _cacheVersion && _cachedSubsystems != null)
+                return _cachedHash;
+
             ulong h = FnvOffset;
             var hashes = new SubsystemHashEntry[SubsystemCount];
 
@@ -236,7 +250,9 @@ namespace CSM.Sync
             hashes[Sub_TickClock].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(TickClock.LocalTick));
 
             // Store per-system hashes for retrieval
-            _lastSubsystemHashes = hashes;
+            _cacheVersion = version;
+            _cachedHash = h;
+            _cachedSubsystems = hashes;
 
             return h;
         }
@@ -247,10 +263,8 @@ namespace CSM.Sync
         /// </summary>
         public static SubsystemHashEntry[] GetSubsystemHashes()
         {
-            return _lastSubsystemHashes;
+            return _cachedSubsystems;
         }
-
-        private static SubsystemHashEntry[] _lastSubsystemHashes;
 
         // ── FNV-1a core ────────────────────────────────────
         // One multiply + one XOR per byte. Faster than MD5/SHA by ~50x.

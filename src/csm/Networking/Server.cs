@@ -354,30 +354,25 @@ namespace CSM.Networking
                         ? DeliveryMethod.ReliableSequenced
                         : DeliveryMethod.ReliableOrdered;
 
+                    bool tickSynced = handler != null && handler.RequiresTickSync && TickClock.IsInitialized;
                     byte[] relayData;
 
-                    if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
+                    if (tickSynced)
                     {
                         // Authoritative tick stamping: the server assigns the target tick
                         // so all clients buffer the command for the same simulation frame.
                         cmd.TargetFrameIndex = TickClock.LocalTick + TickClock.PipelineDepth;
                         CommandInternal.AssignSendSeq(cmd);
                         relayData = Serializer.Serialize(cmd);
+
+                        // Record for redundant retransmission.
+                        Outbox.RecordSent(cmd, relayData);
                     }
                     else
                     {
                         // Non-tick-synced: relay the original bytes unchanged.
                         relayData = new byte[reader.UserDataSize];
                         Array.Copy(reader.RawData, reader.UserDataOffset, relayData, 0, reader.UserDataSize);
-                    }
-
-                    // Record tick-synced relayed commands for redundant retransmission.
-                    // This is critical: if a relay packet is lost, the Outbox's next
-                    // FlushRedundant() will re-deliver it. Without this, only commands
-                    // originated by the server itself were protected.
-                    if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
-                    {
-                        Outbox.RecordSent(cmd, relayData);
                     }
 
                     // Send to all other clients
