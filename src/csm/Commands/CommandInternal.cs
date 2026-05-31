@@ -116,12 +116,20 @@ namespace CSM.Commands
         /// <param name="exclude">The player to not send the packet to.</param>
         public void SendToOtherClients(CommandBase command, Player exclude)
         {
+            SetSenderId(command);
+            byte[] data = Serializer.Serialize(command);
+
+            var handler = GetCommandHandler(command.GetType());
+            var method = handler != null && handler.UseSequencedDelivery
+                ? DeliveryMethod.ReliableSequenced
+                : DeliveryMethod.ReliableOrdered;
+
             foreach (CSMPlayer player in MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Values)
             {
                 if (player.Equals(exclude))
                     continue;
 
-                SendToClient(player, command);
+                player.NetPeer.Send(data, method);
             }
         }
 
