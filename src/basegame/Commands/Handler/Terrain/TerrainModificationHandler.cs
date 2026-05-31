@@ -1,4 +1,5 @@
-﻿using CSM.API.Commands;
+using System.Collections.Generic;
+using CSM.API.Commands;
 using CSM.API.Helpers;
 using CSM.BaseGame.Commands.Data.Terrain;
 using CSM.BaseGame.Helpers;
@@ -9,12 +10,13 @@ namespace CSM.BaseGame.Commands.Handler.Terrain
 {
     public class TerrainModificationHandler : CommandHandler<TerrainModificationCommand>
     {
-        // Receive-side throttle: prevent executing terrain commands more
-        // frequently than the sender could have sent them. This is a
-        // defense-in-depth measure against relay amplification.
-        private static float _lastHandleTime;
-        private static int _lastSenderId = -1;
+        // Per-sender receive-side throttle: prevent executing terrain commands
+        // more frequently than the sender could have sent them. This prevents
+        // relay amplification where a server broadcasting to N clients causes
+        // N extra brush applications.
+        private static readonly Dictionary<int, float> _lastHandleTimeBySender = new Dictionary<int, float>();
         private const float MinHandleInterval = 0.1f; // 100ms = match sender throttle
+        private const int MaxTrackedSenders = 8; // Clean up stale entries
 
         public TerrainModificationHandler()
         {
@@ -24,15 +26,28 @@ namespace CSM.BaseGame.Commands.Handler.Terrain
         }
         protected override void Handle(TerrainModificationCommand command)
         {
-            // Throttle: if the same sender sent a command too recently, skip.
-            // This prevents relay amplification from causing extra brush applications.
+            // Per-sender throttle: skip if this specific sender sent too recently.
             float now = Time.time;
-            if (command.SenderId == _lastSenderId && now - _lastHandleTime < MinHandleInterval)
+            float lastTime;
+            if (_lastHandleTimeBySender.TryGetValue(command.SenderId, out lastTime) &&
+                now - lastTime < MinHandleInterval)
             {
                 return;
             }
-            _lastHandleTime = now;
-            _lastSenderId = command.SenderId;
+            _lastHandleTimeBySender[command.SenderId] = now;
+
+            // Periodic cleanup of stale entries to prevent unbounded growth
+            if (_lastHandleTimeBySender.Count > MaxTrackedSenders)
+            {
+                var keysToRemove = new List<int>();
+                foreach (var kvp in _lastHandleTimeBySender)
+                {
+                    if (now - kvp.Value > 1.0f) // Older than 1 second
+                        keysToRemove.Add(kvp.Key);
+                }
+                foreach (int key in keysToRemove)
+                    _lastHandleTimeBySender.Remove(key);
+            }
 
             TerrainTool tool = Singleton<ToolSimulator>.instance.GetTool<TerrainTool>(command.SenderId);
 

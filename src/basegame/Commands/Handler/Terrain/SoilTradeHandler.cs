@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CSM.API.Commands;
 using CSM.API.Helpers;
 using CSM.BaseGame.Commands.Data.Terrain;
@@ -7,9 +8,12 @@ namespace CSM.BaseGame.Commands.Handler.Terrain
 {
     public class SoilTradeHandler : CommandHandler<SoilTradeCommand>
     {
-        // Receive-side throttle: match sender's 150ms interval
-        private static float _lastHandleTime;
+        // Per-sender receive-side throttle: match sender's 150ms interval.
+        // Soil trade is idempotent (only the latest DirtBuffer matters)
+        // so skipping rapid successive updates is safe.
+        private static readonly Dictionary<int, float> _lastHandleTimeBySender = new Dictionary<int, float>();
         private const float MinHandleInterval = 0.15f;
+        private const int MaxTrackedSenders = 8;
 
         public SoilTradeHandler()
         {
@@ -19,13 +23,28 @@ namespace CSM.BaseGame.Commands.Handler.Terrain
         }
         protected override void Handle(SoilTradeCommand command)
         {
-            // Throttle: skip if received too quickly from the network
+            // Per-sender throttle: skip if this specific sender sent too recently.
             float now = Time.time;
-            if (now - _lastHandleTime < MinHandleInterval)
+            float lastTime;
+            if (_lastHandleTimeBySender.TryGetValue(command.SenderId, out lastTime) &&
+                now - lastTime < MinHandleInterval)
             {
                 return;
             }
-            _lastHandleTime = now;
+            _lastHandleTimeBySender[command.SenderId] = now;
+
+            // Periodic cleanup of stale entries
+            if (_lastHandleTimeBySender.Count > MaxTrackedSenders)
+            {
+                var keysToRemove = new List<int>();
+                foreach (var kvp in _lastHandleTimeBySender)
+                {
+                    if (now - kvp.Value > 1.0f)
+                        keysToRemove.Add(kvp.Key);
+                }
+                foreach (int key in keysToRemove)
+                    _lastHandleTimeBySender.Remove(key);
+            }
 
             IgnoreHelper.Instance.StartIgnore();
 
