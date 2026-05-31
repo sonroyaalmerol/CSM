@@ -8,6 +8,7 @@ using CSM.Commands.Data.Game;
 using CSM.Commands.Handler.Game;
 using CSM.Commands.Handler.Internal;
 using CSM.Networking;
+using CSM.Sync;
 using UnityEngine;
 using Random = System.Random;
 
@@ -57,6 +58,13 @@ namespace CSM.Helpers
         /// </summary>
         public static void SimulationStep()
         {
+            // When the tick gate or desync detector has paused the simulation,
+            // don't interfere with pause/speed negotiations. SpeedPauseHelper reads
+            // m_simulationPaused which both systems also set — without this guard,
+            // the systems would fight over the pause state in an infinite loop.
+            if (FrameGate.IsGateClosed || DesyncDetector.IsDesyncPaused)
+                return;
+
             // First tick in the game, initialize speed and pause state tracking variables
             if (!_initialized)
             {
@@ -217,10 +225,10 @@ namespace CSM.Helpers
         /// <param name="highestLatency">The highest latency of all responses.</param>
         public static void SpeedPauseResponseReceived(long highestGameTime, long highestLatency)
         {
-            // Pause time is computed by taking the highest game time plus 4 times the maximum latency because this
-            // is the worst case roundtrip time from client1 -> server -> client2 -> server -> client1 which means
+            // Pause time is computed by taking the highest game time plus 2 times the maximum latency because this
+            // is the worst case roundtrip time from client1 -> server -> client2 which means
             // that this amount of time may have already passed since the highest game time was determined.
-            DateTime pauseTime = new DateTime(highestGameTime) + MillisecondsToInGameTime(highestLatency * 4);
+            DateTime pauseTime = new DateTime(highestGameTime) + MillisecondsToInGameTime(highestLatency * 2);
             if (_state == SpeedPauseState.PauseRequested)
             {
                 _state = SpeedPauseState.WaitingForPause;

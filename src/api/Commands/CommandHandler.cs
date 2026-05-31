@@ -15,6 +15,23 @@ namespace CSM.API.Commands
         /// </summary>
         public bool TransactionCmd { get; protected set; } = true;
 
+        /// <summary>
+        ///     If true, uses ReliableSequenced delivery instead of ReliableOrdered.
+        ///     ReliableSequenced avoids head-of-line blocking on packet loss by dropping
+        ///     stale packets instead of buffering them. Use for commands where only the
+        ///     latest state matters (cursor positions, slowdown, etc.).
+        /// </summary>
+        public bool UseSequencedDelivery { get; protected set; } = false;
+
+        /// <summary>
+        ///     If true, this command is buffered by the tick-sync system and executed
+        ///     at a server-assigned target tick. This guarantees all clients execute
+        ///     the command at the same simulation tick, preventing desync.
+        ///     Set to false for meta-commands (connection, speed/pause, cursor display)
+        ///     that must execute immediately upon receipt.
+        /// </summary>
+        public bool RequiresTickSync { get; protected set; } = true;
+
         public abstract Type GetDataType();
 
         public abstract void Parse(CommandBase message);

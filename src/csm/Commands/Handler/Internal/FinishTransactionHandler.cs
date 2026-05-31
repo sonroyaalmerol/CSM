@@ -8,6 +8,7 @@ namespace CSM.Commands.Handler.Internal
         public FinishTransactionHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(FinishTransactionCommand command)

@@ -3,13 +3,37 @@ using CSM.API.Helpers;
 using CSM.BaseGame.Commands.Data.Terrain;
 using CSM.BaseGame.Helpers;
 using ColossalFramework;
+using UnityEngine;
 
 namespace CSM.BaseGame.Commands.Handler.Terrain
 {
     public class TerrainModificationHandler : CommandHandler<TerrainModificationCommand>
     {
+        // Receive-side throttle: prevent executing terrain commands more
+        // frequently than the sender could have sent them. This is a
+        // defense-in-depth measure against relay amplification.
+        private static float _lastHandleTime;
+        private static int _lastSenderId = -1;
+        private const float MinHandleInterval = 0.1f; // 100ms = match sender throttle
+
+        public TerrainModificationHandler()
+        {
+            TransactionCmd = false;
+            UseSequencedDelivery = true;
+            RequiresTickSync = false;
+        }
         protected override void Handle(TerrainModificationCommand command)
         {
+            // Throttle: if the same sender sent a command too recently, skip.
+            // This prevents relay amplification from causing extra brush applications.
+            float now = Time.time;
+            if (command.SenderId == _lastSenderId && now - _lastHandleTime < MinHandleInterval)
+            {
+                return;
+            }
+            _lastHandleTime = now;
+            _lastSenderId = command.SenderId;
+
             TerrainTool tool = Singleton<ToolSimulator>.instance.GetTool<TerrainTool>(command.SenderId);
 
             // Apply data from command

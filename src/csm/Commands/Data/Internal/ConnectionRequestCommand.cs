@@ -66,5 +66,12 @@ namespace CSM.Commands.Data.Internal
         /// </summary>
         [ProtoMember(8)]
         public List<string> Mods { get; set; }
+
+        /// <summary>
+        ///     The tick-sync protocol version the client supports.
+        ///     Must match <see cref="CommandBase.SyncProtocolVersion" />.
+        /// </summary>
+        [ProtoMember(9)]
+        public int ProtocolVersion { get; set; }
     }
 }

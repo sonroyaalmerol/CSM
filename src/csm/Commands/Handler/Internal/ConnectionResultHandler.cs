@@ -18,6 +18,7 @@ namespace CSM.Commands.Handler.Internal
         public ConnectionResultHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(ConnectionResultCommand command)
@@ -29,6 +30,12 @@ namespace CSM.Commands.Handler.Internal
             // If we are allowed to connect
             if (command.Success)
             {
+                // Verify protocol version
+                if (command.ProtocolVersion != CommandBase.SyncProtocolVersion)
+                {
+                    Log.Warn($"Server protocol version {command.ProtocolVersion} does not match " +
+                             $"client version {CommandBase.SyncProtocolVersion}. Connection may be unstable.");
+                }
                 // Log and set that we are connected.
                 Log.Info("Successfully connected to server. Downloading world...");
                 MultiplayerManager.Instance.CurrentClient.ClientPlayer = new Player();

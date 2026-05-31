@@ -8,6 +8,7 @@ namespace CSM.BaseGame.Commands.Handler.Economy
         public EconomyResourcesHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(EconomyResourcesCommand command)

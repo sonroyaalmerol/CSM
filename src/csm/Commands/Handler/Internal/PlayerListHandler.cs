@@ -8,6 +8,12 @@ namespace CSM.Commands.Handler.Internal
 {
     public class PlayerListHandler : CommandHandler<PlayerListCommand>
     {
+        public PlayerListHandler()
+        {
+            TransactionCmd = false;
+            RequiresTickSync = false;
+        }
+
         protected override void Handle(PlayerListCommand command)
         {
             MultiplayerManager.Instance.PlayerList.Clear();

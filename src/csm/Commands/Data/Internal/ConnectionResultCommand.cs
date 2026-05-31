@@ -60,5 +60,12 @@ namespace CSM.Commands.Data.Internal
         /// </summary>
         [ProtoMember(7)]
         public string ServerToken { get; set; }
+
+        /// <summary>
+        ///     The server's tick-sync protocol version. The client can
+        ///     verify this matches its own <see cref="CommandBase.SyncProtocolVersion" />.
+        /// </summary>
+        [ProtoMember(8)]
+        public int ProtocolVersion { get; set; }
     }
 }

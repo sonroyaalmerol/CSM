@@ -10,6 +10,7 @@ namespace CSM.Commands.Handler.Internal
         public RequestWorldTransferHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
             RelayOnServer = false;
         }
 

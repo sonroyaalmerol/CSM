@@ -9,6 +9,7 @@ namespace CSM.Commands.Handler.Internal
         public ChatMessageHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(ChatMessageCommand command)

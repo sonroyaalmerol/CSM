@@ -14,6 +14,7 @@ using CSM.GS.Commands;
 using CSM.GS.Commands.Data.ApiServer;
 using CSM.Helpers;
 using CSM.Networking.Config;
+using CSM.Sync;
 using CSM.Util;
 using LiteNetLib;
 using ColossalFramework;
@@ -69,7 +70,11 @@ namespace CSM.Networking
             _netServer = new LiteNetLib.NetManager(listener)
             {
                 NatPunchEnabled = true,
-                UnconnectedMessagesEnabled = true
+                UnconnectedMessagesEnabled = true,
+                DisconnectTimeout = 30000,
+                PingInterval = 2000,
+                ReconnectDelay = 500,
+                MaxConnectAttempts = 20
             };
 
             // Listen to events
@@ -219,7 +224,12 @@ namespace CSM.Networking
             if (Status != ServerStatus.Running)
                 return;
 
-            _netServer.SendToAll(Serializer.Serialize(message), DeliveryMethod.ReliableOrdered);
+            var handler = CommandInternal.Instance.GetCommandHandler(message.GetType());
+            var method = handler != null && handler.UseSequencedDelivery
+                ? DeliveryMethod.ReliableSequenced
+                : DeliveryMethod.ReliableOrdered;
+
+            _netServer.SendToAll(Serializer.Serialize(message), method);
 
             Log.Debug($"Sending {message.GetType().Name} to all clients");
         }
@@ -232,9 +242,30 @@ namespace CSM.Networking
             if (Status != ServerStatus.Running)
                 return;
 
-            peer.Send(Serializer.Serialize(message), DeliveryMethod.ReliableOrdered);
+            var handler = CommandInternal.Instance.GetCommandHandler(message.GetType());
+            var method = handler != null && handler.UseSequencedDelivery
+                ? DeliveryMethod.ReliableSequenced
+                : DeliveryMethod.ReliableOrdered;
+
+            peer.Send(Serializer.Serialize(message), method);
 
             Log.Debug($"Sending {message.GetType().Name} to client at {peer.EndPoint.Address}:{peer.EndPoint.Port}");
+        }
+
+        /// <summary>
+        ///     Send a raw byte array to all connected clients.
+        ///     Used by the sync protocol for TICK_SYNC and STATE_HASH packets.
+        /// </summary>
+        public void SendRawToAll(byte[] data, DeliveryMethod method)
+        {
+            if (Status != ServerStatus.Running)
+                return;
+
+            List<NetPeer> peers = _netServer.ConnectedPeerList;
+            foreach (NetPeer client in peers)
+            {
+                client.Send(data, method);
+            }
         }
 
         /// <summary>
@@ -313,25 +344,49 @@ namespace CSM.Networking
         {
             try
             {
-                // Parse this message
-                bool relayOnServer = CommandReceiver.Parse(reader, peer);
+                byte[] remaining = reader.GetRemainingBytes();
+
+                // Check if this is a sync protocol packet (0xFE magic byte)
+                if (SyncBatch.IsSyncPacket(remaining))
+                {
+                    CommandReceiver.ParseSyncPacket(remaining);
+                    return;
+                }
+
+                // Parse, validate, and execute the command on the server.
+                bool relayOnServer = CommandReceiver.Parse(
+                    reader, peer, out bool useSequenced, out CommandBase cmd);
 
                 if (relayOnServer)
                 {
-                    // Copy relevant message part (exclude protocol headers)
-                    byte[] data = new byte[reader.UserDataSize];
-                    Array.Copy(reader.RawData, reader.UserDataOffset, data, 0, reader.UserDataSize);
+                    var handler = CommandInternal.Instance.GetCommandHandler(cmd.GetType());
+                    var method = useSequenced
+                        ? DeliveryMethod.ReliableSequenced
+                        : DeliveryMethod.ReliableOrdered;
 
-                    // Send this message to all other clients
+                    byte[] relayData;
+
+                    if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
+                    {
+                        // Authoritative tick stamping: the server assigns the target tick
+                        // so all clients buffer the command for the same simulation frame.
+                        cmd.TargetFrameIndex = TickClock.LocalTick + TickClock.PipelineDepth;
+                        relayData = Serializer.Serialize(cmd);
+                    }
+                    else
+                    {
+                        // Non-tick-synced: relay the original bytes unchanged.
+                        relayData = new byte[reader.UserDataSize];
+                        Array.Copy(reader.RawData, reader.UserDataOffset, relayData, 0, reader.UserDataSize);
+                    }
+
+                    // Send to all other clients
                     List<NetPeer> peers = _netServer.ConnectedPeerList;
                     foreach (NetPeer client in peers)
                     {
-                        // Don't send the message back to the client that sent it.
                         if (client.Id == peer.Id)
                             continue;
-
-                        // Send the message so the other client can stay in sync
-                        client.Send(data, DeliveryMethod.ReliableOrdered);
+                        client.Send(relayData, method);
                     }
                 }
             }

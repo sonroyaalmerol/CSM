@@ -11,6 +11,7 @@ namespace CSM.Commands.Handler.Internal
         public ClientJoiningHandler()
         {
             TransactionCmd = false;
+            RequiresTickSync = false;
         }
 
         protected override void Handle(ClientJoiningCommand command)

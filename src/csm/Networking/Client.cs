@@ -51,6 +51,18 @@ namespace CSM.Networking
         public Player ClientPlayer { get; set; } = new Player();
 
         /// <summary>
+        ///     Gets the server NetPeer if connected, or null.
+        /// </summary>
+        public LiteNetLib.NetPeer ServerPeer
+        {
+            get
+            {
+                var peers = _netClient?.ConnectedPeerList;
+                return (peers != null && peers.Count > 0) ? peers[0] : null;
+            }
+        }
+
+        /// <summary>
         ///     If the status is disconnected, this will contain
         ///     the reason why.
         /// </summary>
@@ -71,7 +83,11 @@ namespace CSM.Networking
             _netClient = new LiteNetLib.NetManager(listener)
             {
                 NatPunchEnabled = true,
-                UnconnectedMessagesEnabled = true
+                UnconnectedMessagesEnabled = true,
+                DisconnectTimeout = 30000,
+                PingInterval = 2000,
+                ReconnectDelay = 500,
+                MaxConnectAttempts = 20
             };
 
             // Listen to events
@@ -373,7 +389,12 @@ namespace CSM.Networking
 
             Log.Debug($"Sending {message.GetType().Name} to server");
 
-            server.Send(Serializer.Serialize(message), DeliveryMethod.ReliableOrdered);
+            var handler = CommandInternal.Instance.GetCommandHandler(message.GetType());
+            var method = handler != null && handler.UseSequencedDelivery
+                ? DeliveryMethod.ReliableSequenced
+                : DeliveryMethod.ReliableOrdered;
+
+            server.Send(Serializer.Serialize(message), method);
         }
 
         /// <summary>
@@ -393,7 +414,18 @@ namespace CSM.Networking
         {
             try
             {
-                CommandReceiver.Parse(reader, peer);
+                // Check if this is a sync protocol packet (0xFE magic byte)
+                byte[] remaining = reader.GetRemainingBytes();
+                if (SyncBatch.IsSyncPacket(remaining))
+                {
+                    // Sync protocol packet
+                    CommandReceiver.ParseSyncPacket(remaining);
+                }
+                else
+                {
+                    // Legacy protobuf command (client doesn't relay, discard useSequenced)
+                    CommandReceiver.Parse(reader, peer, out bool discard, out CommandBase discardedCmd);
+                }
             }
             catch (Exception ex)
             {
@@ -422,7 +454,8 @@ namespace CSM.Networking
                 Username = Config.Username,
                 ExpansionBitMask = DLCHelper.GetOwnedExpansions(),
                 ModderPackBitMask = DLCHelper.GetOwnedModderPacks(),
-                Mods = ModSupport.Instance.RequiredModsForSync
+                Mods = ModSupport.Instance.RequiredModsForSync,
+                ProtocolVersion = CommandBase.SyncProtocolVersion
             };
 
             Log.Info("Sending connection request to server...");
