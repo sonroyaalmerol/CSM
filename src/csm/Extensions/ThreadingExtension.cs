@@ -176,17 +176,11 @@ namespace CSM.Extensions
         private void SendStateHash()
         {
             ulong hash = StateHasher.ComputeHash();
-            int senderId = -1;
-            if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
-            {
-                senderId = MultiplayerManager.Instance.CurrentClient.ClientId;
-            }
 
             Command.SendToAll(new StateHashCommand
             {
                 Tick = TickClock.LocalTick,
                 Hash = hash,
-                SenderId = senderId,
                 SubsystemHashes = StateHasher.GetSubsystemHashes()
             });
         }

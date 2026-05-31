@@ -107,12 +107,12 @@ namespace CSM.Sync
                 var bm = Singleton<BuildingManager>.instance;
                 if (bm != null)
                 {
-                    h = Fnv1a(h, BitConverter.GetBytes(bm.m_buildings.m_size));
                     ulong bHash = FnvOffset;
                     bHash = Fnv1a(bHash, BitConverter.GetBytes(bm.m_buildings.m_size));
                     bHash = HashSampledBuildings(bHash, bm, 32);
                     hashes[Sub_Buildings].Hash = bHash;
-                    h = HashSampledBuildings(h, bm, 32);
+                    h = Fnv1a(h, BitConverter.GetBytes(bm.m_buildings.m_size));
+                    h = Fnv1a(h, BitConverter.GetBytes(bHash));
                 }
             }
             catch { }
@@ -123,12 +123,12 @@ namespace CSM.Sync
                 var nm = Singleton<NetManager>.instance;
                 if (nm != null)
                 {
-                    h = Fnv1a(h, BitConverter.GetBytes(nm.m_segments.m_size));
                     ulong nHash = FnvOffset;
                     nHash = Fnv1a(nHash, BitConverter.GetBytes(nm.m_segments.m_size));
                     nHash = HashSampledSegments(nHash, nm, 24);
                     hashes[Sub_Networks].Hash = nHash;
-                    h = HashSampledSegments(h, nm, 24);
+                    h = Fnv1a(h, BitConverter.GetBytes(nm.m_segments.m_size));
+                    h = Fnv1a(h, BitConverter.GetBytes(nHash));
                 }
             }
             catch { }
@@ -168,10 +168,9 @@ namespace CSM.Sync
                     dHash = Fnv1a(dHash, BitConverter.GetBytes(dm.m_parks.m_size));
                     dHash = HashDistrictPolicies(dHash, dm);
                     hashes[Sub_Districts].Hash = dHash;
-
                     h = Fnv1a(h, BitConverter.GetBytes(dm.m_districts.m_size));
                     h = Fnv1a(h, BitConverter.GetBytes(dm.m_parks.m_size));
-                    h = HashDistrictPolicies(h, dm);
+                    h = Fnv1a(h, BitConverter.GetBytes(dHash));
                 }
             }
             catch { }

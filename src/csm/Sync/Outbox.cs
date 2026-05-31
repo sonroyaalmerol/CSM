@@ -56,15 +56,6 @@ namespace CSM.Sync
         {
             /// <summary>Serialized protobuf bytes, ready to re-send.</summary>
             public byte[] Data;
-
-            /// <summary>The command type name for logging.</summary>
-            public string TypeName;
-
-            /// <summary>Target tick for deduplication at receiver.</summary>
-            public uint TargetTick;
-
-            /// <summary>Sender ID for deduplication at receiver.</summary>
-            public int SenderId;
         }
 
         /// <summary>
@@ -78,10 +69,7 @@ namespace CSM.Sync
         {
             _history[_historyHead] = new HistoryEntry
             {
-                Data = serializedData,
-                TypeName = cmd.GetType().Name,
-                TargetTick = cmd.TargetFrameIndex,
-                SenderId = cmd.SenderId
+                Data = serializedData
             };
 
             _historyHead = (_historyHead + 1) % HistorySize;
@@ -139,11 +127,6 @@ namespace CSM.Sync
                 Log.Debug($"[Outbox] Retransmitted {sent} recent commands");
             }
         }
-
-        /// <summary>
-        ///     Number of commands in the history buffer.
-        /// </summary>
-        public static int HistoryCount { get { return _historyCount; } }
 
         /// <summary>
         ///     Clear all state. Called on disconnect.
