@@ -18,18 +18,24 @@ namespace CSM.Commands.Handler.Sync
         }
 
         /// <summary>
-        ///     Track the last received hashes per sender for deduplication.
+        ///     Track the last processed tick per sender for deduplication.
         ///     Prevents redundant mismatch processing when the same sender's
         ///     redundant retransmission arrives twice.
         /// </summary>
-        private static int _lastProcessedSenderId = -1;
-        private static uint _lastProcessedTick;
+        private static readonly System.Collections.Generic.Dictionary<int, uint> _lastProcessedBySender =
+            new System.Collections.Generic.Dictionary<int, uint>();
+
+        // Stale entry cleanup threshold
+        private const int MaxTrackedSenders = 8;
 
         protected override void Handle(StateHashCommand command)
         {
-            // Deduplicate: if we've already processed this sender's hash for this tick, skip.
-            // This handles redundant retransmission from the outbox system.
-            if (command.SenderId == _lastProcessedSenderId && command.Tick == _lastProcessedTick)
+            // Deduplicate: if we've already processed this sender's hash
+            // for this tick, skip. Handles redundant retransmission from
+            // the outbox system.
+            uint lastProcessedTick;
+            if (_lastProcessedBySender.TryGetValue(command.SenderId, out lastProcessedTick) &&
+                command.Tick == lastProcessedTick)
             {
                 return;
             }
@@ -54,8 +60,20 @@ namespace CSM.Commands.Handler.Sync
                 DesyncDetector.OnHashMatch(command.Tick);
             }
 
-            _lastProcessedSenderId = command.SenderId;
-            _lastProcessedTick = command.Tick;
+            // Cleanup stale entries to prevent unbounded growth
+            if (_lastProcessedBySender.Count > MaxTrackedSenders)
+            {
+                uint minTick = uint.MaxValue;
+                int oldestSender = -1;
+                foreach (var kvp in _lastProcessedBySender)
+                {
+                    if (kvp.Value < minTick) { minTick = kvp.Value; oldestSender = kvp.Key; }
+                }
+                if (oldestSender >= 0)
+                    _lastProcessedBySender.Remove(oldestSender);
+            }
+
+            _lastProcessedBySender[command.SenderId] = command.Tick;
         }
 
         /// <summary>
@@ -124,8 +142,7 @@ namespace CSM.Commands.Handler.Sync
         /// <summary>Reset deduplication state. Called on disconnect.</summary>
         public static void Reset()
         {
-            _lastProcessedSenderId = -1;
-            _lastProcessedTick = 0;
+            _lastProcessedBySender.Clear();
         }
     }
 }
