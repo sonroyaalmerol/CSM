@@ -17,7 +17,7 @@ namespace CSM.Sync
     ///     Subsystem IDs:
     ///       0 = Economy, 1 = BuildIndex, 2 = Population, 3 = Buildings,
     ///       4 = Networks, 5 = Trees, 6 = Props, 7 = Districts,
-    ///       8 = Transport, 9 = Vehicles, 10 = TickClock.
+    ///       8 = Transport, 9 = Vehicles, 10 = TickClock, 11 = Zones.
     /// </summary>
     public static class StateHasher
     {
@@ -39,7 +39,8 @@ namespace CSM.Sync
         public const int Sub_Transport = 8;
         public const int Sub_Vehicles = 9;
         public const int Sub_TickClock = 10;
-        public const int SubsystemCount = 11;
+        public const int Sub_Zones = 11;
+        public const int SubsystemCount = 12;
 
         /// <summary>
         ///     Human-readable names for each subsystem ID.
@@ -49,7 +50,7 @@ namespace CSM.Sync
         {
             "Economy", "BuildIndex", "Population", "Buildings",
             "Networks", "Trees", "Props", "Districts",
-            "Transport", "Vehicles", "TickClock"
+            "Transport", "Vehicles", "TickClock", "Zones"
         };
 
         /// <summary>
@@ -204,7 +205,33 @@ namespace CSM.Sync
             }
             catch { }
 
-            // 11. Tick clock (stored as subsystem hash for diagnostics,
+            // 11. Zone blocks (sampled)
+            try
+            {
+                var zm = Singleton<ZoneManager>.instance;
+                if (zm != null)
+                {
+                    ulong zHash = FnvOffset;
+                    zHash = Fnv1a(zHash, BitConverter.GetBytes(zm.m_blocks.m_size));
+                    var blocks = zm.m_blocks.m_buffer;
+                    int bTotal = blocks != null ? blocks.Length : 0;
+                    int bStep = Math.Max(1, bTotal / 32);
+                    for (int i = 1; i < bTotal; i += bStep)
+                    {
+                        ref var blk = ref blocks[i];
+                        zHash ^= (ulong)i;
+                        zHash *= FnvPrime;
+                        zHash = Fnv1a(zHash, BitConverter.GetBytes(blk.m_zone1));
+                        zHash = Fnv1a(zHash, BitConverter.GetBytes(blk.m_zone2));
+                    }
+                    hashes[Sub_Zones].Hash = zHash;
+                    // Mix zone subsystem hash into aggregate
+                    h = Fnv1a(h, BitConverter.GetBytes(zHash));
+                }
+            }
+            catch { }
+
+            // 12. Tick clock (stored as subsystem hash for diagnostics,
             // but NOT mixed into the aggregate hash — server and client
             // are always at different local ticks).
             hashes[Sub_TickClock].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(TickClock.LocalTick));

@@ -24,7 +24,8 @@ namespace CSM.Commands.Data.Sync
     ///       7 = Districts (including policies)
     ///       8 = Transport
     ///       9 = Vehicles
-    ///     10 = TickClock
+    ///      10 = TickClock (diagnostic only)
+    ///      11 = Zones (sampled)
     /// </summary>
     [ProtoContract]
     public class StateHashCommand : CommandBase
@@ -34,9 +35,6 @@ namespace CSM.Commands.Data.Sync
 
         [ProtoMember(2)]
         public ulong Hash { get; set; }
-
-        [ProtoMember(3)]
-        public int SenderId { get; set; }
 
         /// <summary>
         ///     Per-subsystem checksum traces. Each entry is an FNV-1a 64-bit hash
@@ -57,7 +55,7 @@ namespace CSM.Commands.Data.Sync
         ///     Subsystem identifier:
         ///     0=Economy, 1=BuildIndex, 2=Population, 3=Buildings,
         ///     4=Networks, 5=Trees, 6=Props, 7=Districts,
-        ///     8=Transport, 9=Vehicles, 10=TickClock.
+        ///     8=Transport, 9=Vehicles, 10=TickClock, 11=Zones.
         /// </summary>
         [ProtoMember(1)]
         public int SubsystemId { get; set; }
