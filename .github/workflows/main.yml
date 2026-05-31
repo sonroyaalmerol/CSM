@@ -80,13 +80,18 @@ jobs:
             nuget push CitiesSkylinesMultiplayer.API.${{ steps.csm_version.outputs.version }}.0.nupkg ${{ secrets.NUGET_API_KEY }} -NonInteractive -Source https://api.nuget.org/v3/index.json
           }
 
+      # Zip release assets
+      - name: Zip release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: Compress-Archive -Path output\* -DestinationPath CSM.zip
+
       # Create GitHub Release on tag push
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: CSM ${{ steps.csm_version.outputs.version }}
-          files: output/*
+          files: CSM.zip
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
