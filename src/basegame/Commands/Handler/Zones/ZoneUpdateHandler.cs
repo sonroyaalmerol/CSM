@@ -6,6 +6,11 @@ namespace CSM.BaseGame.Commands.Handler.Zones
 {
     public class ZoneUpdateHandler : CommandHandler<ZoneUpdateCommand>
     {
+        public ZoneUpdateHandler()
+        {
+            UseSequencedDelivery = true;
+        }
+
         protected override void Handle(ZoneUpdateCommand command)
         {
             ZoneManager.instance.m_blocks.m_buffer[command.ZoneId].m_zone1 = command.Zone1;

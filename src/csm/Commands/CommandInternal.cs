@@ -75,14 +75,18 @@ namespace CSM.Commands
             TransactionHandler.StartTransaction(command);
             SetSenderId(command);
 
-            // Record tick-synced commands for redundant retransmission
+            // Serialize once — both the Outbox and the network send use the same bytes.
             var handler = GetCommandHandler(command.GetType());
-            if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
+            bool tickSynced = handler != null && handler.RequiresTickSync && TickClock.IsInitialized;
+            byte[] data = null;
+
+            if (tickSynced)
             {
-                Outbox.RecordSent(command);
+                data = Serializer.Serialize(command);
+                Outbox.RecordSent(command, data);
             }
 
-            MultiplayerManager.Instance.CurrentServer.SendToClients(command);
+            MultiplayerManager.Instance.CurrentServer.SendToClients(command, data);
         }
 
         /// <summary>
@@ -116,14 +120,18 @@ namespace CSM.Commands
             TransactionHandler.StartTransaction(command);
             SetSenderId(command);
 
-            // Record tick-synced commands for redundant retransmission
+            // Serialize once — both the Outbox and the network send use the same bytes.
             var handler = GetCommandHandler(command.GetType());
-            if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
+            bool tickSynced = handler != null && handler.RequiresTickSync && TickClock.IsInitialized;
+            byte[] data = null;
+
+            if (tickSynced)
             {
-                Outbox.RecordSent(command);
+                data = Serializer.Serialize(command);
+                Outbox.RecordSent(command, data);
             }
 
-            MultiplayerManager.Instance.CurrentClient.SendToServer(command);
+            MultiplayerManager.Instance.CurrentClient.SendToServer(command, data);
         }
 
         /// <summary>

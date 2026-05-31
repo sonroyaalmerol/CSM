@@ -5,6 +5,7 @@ using ColossalFramework.Threading;
 using CSM.API;
 using CSM.API.Commands;
 using CSM.API.Networking.Status;
+using CSM.Commands.Handler.Sync;
 using CSM.Networking.Config;
 using CSM.Panels;
 using CSM.Sync;
@@ -145,6 +146,7 @@ namespace CSM.Networking
             CommandBuffer.Clear();
             Outbox.Clear();
             DesyncDetector.Reset();
+            StateHashHandler.Reset();
         }
         
         /// <summary>

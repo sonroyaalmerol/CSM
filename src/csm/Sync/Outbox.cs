@@ -1,8 +1,7 @@
 using CSM.API;
 using CSM.API.Commands;
-using CSM.Commands;
 using CSM.Networking;
-using CSM.Util;
+using LiteNetLib;
 
 namespace CSM.Sync
 {
@@ -73,13 +72,13 @@ namespace CSM.Sync
         ///     Stores the serialized bytes in the history ring for
         ///     redundant retransmission on the next TICK_SYNC interval.
         /// </summary>
-        public static void RecordSent(CommandBase cmd)
+        /// <param name="cmd">The command (for metadata extraction).</param>
+        /// <param name="serializedData">Pre-serialized bytes to avoid double serialization.</param>
+        public static void RecordSent(CommandBase cmd, byte[] serializedData)
         {
-            byte[] data = Serializer.Serialize(cmd);
-
             _history[_historyHead] = new HistoryEntry
             {
-                Data = data,
+                Data = serializedData,
                 TypeName = cmd.GetType().Name,
                 TargetTick = cmd.TargetFrameIndex,
                 SenderId = cmd.SenderId
@@ -119,15 +118,17 @@ namespace CSM.Sync
                 if (_history[idx].Data == null)
                     continue;
 
+                // Send pre-serialized bytes directly — skip deserialize + re-serialize.
+                // Tick-synced commands always use ReliableOrdered.
                 if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
                 {
-                    var cmd = CommandReceiver.Deserialize(_history[idx].Data);
-                    MultiplayerManager.Instance.CurrentServer.SendToClients(cmd);
+                    MultiplayerManager.Instance.CurrentServer.SendRawToClients(
+                        _history[idx].Data, DeliveryMethod.ReliableOrdered);
                 }
                 else if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
                 {
-                    var cmd = CommandReceiver.Deserialize(_history[idx].Data);
-                    MultiplayerManager.Instance.CurrentClient.SendToServer(cmd);
+                    MultiplayerManager.Instance.CurrentClient.SendRawToServer(
+                        _history[idx].Data, DeliveryMethod.ReliableOrdered);
                 }
 
                 sent++;

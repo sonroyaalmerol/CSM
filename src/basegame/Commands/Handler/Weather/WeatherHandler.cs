@@ -6,6 +6,11 @@ namespace CSM.BaseGame.Commands.Handler.Weather
 {
     public class WeatherHandler : CommandHandler<WeatherCommand>
     {
+        public WeatherHandler()
+        {
+            UseSequencedDelivery = true;
+        }
+
         protected override void Handle(WeatherCommand command)
         {
             if (Command.CurrentRole == MultiplayerRole.Server)

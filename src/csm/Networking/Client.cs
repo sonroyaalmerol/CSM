@@ -378,7 +378,7 @@ namespace CSM.Networking
             Log.Info("Disconnected from server");
         }
 
-        public void SendToServer(CommandBase message)
+        public void SendToServer(CommandBase message, byte[] preSerialized)
         {
             if (Status == ClientStatus.Disconnected || Status == ClientStatus.PreConnecting)
             {
@@ -395,7 +395,23 @@ namespace CSM.Networking
                 ? DeliveryMethod.ReliableSequenced
                 : DeliveryMethod.ReliableOrdered;
 
-            server.Send(Serializer.Serialize(message), method);
+            // Use pre-serialized bytes if available (avoids double serialization)
+            byte[] data = preSerialized ?? Serializer.Serialize(message);
+            server.Send(data, method);
+        }
+
+        /// <summary>
+        ///     Send raw pre-serialized bytes directly to the server.
+        ///     Used by the Outbox for redundant retransmission where we
+        ///     already have serialized bytes and want to avoid re-serialization.
+        /// </summary>
+        public void SendRawToServer(byte[] data, DeliveryMethod method)
+        {
+            if (Status == ClientStatus.Disconnected || Status == ClientStatus.PreConnecting)
+                return;
+
+            NetPeer server = _netClient.ConnectedPeerList[0];
+            server.Send(data, method);
         }
 
         /// <summary>

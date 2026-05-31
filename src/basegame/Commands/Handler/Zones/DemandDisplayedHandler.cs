@@ -5,6 +5,11 @@ namespace CSM.BaseGame.Commands.Handler.Zones
 {
     public class DemandDisplayedHandler : CommandHandler<DemandDisplayedCommand>
     {
+        public DemandDisplayedHandler()
+        {
+            UseSequencedDelivery = true;
+        }
+
         protected override void Handle(DemandDisplayedCommand command)
         {
             // Don't handle on server

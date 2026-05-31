@@ -219,7 +219,7 @@ namespace CSM.Networking
         ///     Send a message to all connected clients.
         /// </summary>
         /// <param name="message">The actual message</param>
-        public void SendToClients(CommandBase message)
+        public void SendToClients(CommandBase message, byte[] preSerialized)
         {
             if (Status != ServerStatus.Running)
                 return;
@@ -229,9 +229,24 @@ namespace CSM.Networking
                 ? DeliveryMethod.ReliableSequenced
                 : DeliveryMethod.ReliableOrdered;
 
-            _netServer.SendToAll(Serializer.Serialize(message), method);
+            // Use pre-serialized bytes if available (avoids double serialization)
+            byte[] data = preSerialized ?? Serializer.Serialize(message);
+            _netServer.SendToAll(data, method);
 
             Log.Debug($"Sending {message.GetType().Name} to all clients");
+        }
+
+        /// <summary>
+        ///     Send raw pre-serialized bytes to all connected clients.
+        ///     Used by the Outbox for redundant retransmission where we
+        ///     already have serialized bytes and want to avoid re-serialization.
+        /// </summary>
+        public void SendRawToClients(byte[] data, DeliveryMethod method)
+        {
+            if (Status != ServerStatus.Running)
+                return;
+
+            _netServer.SendToAll(data, method);
         }
 
         /// <summary>
@@ -353,6 +368,15 @@ namespace CSM.Networking
                         // Non-tick-synced: relay the original bytes unchanged.
                         relayData = new byte[reader.UserDataSize];
                         Array.Copy(reader.RawData, reader.UserDataOffset, relayData, 0, reader.UserDataSize);
+                    }
+
+                    // Record tick-synced relayed commands for redundant retransmission.
+                    // This is critical: if a relay packet is lost, the Outbox's next
+                    // FlushRedundant() will re-deliver it. Without this, only commands
+                    // originated by the server itself were protected.
+                    if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
+                    {
+                        Outbox.RecordSent(cmd, relayData);
                     }
 
                     // Send to all other clients

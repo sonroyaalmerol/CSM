@@ -57,6 +57,8 @@ namespace CSM.Sync
         ///     Should be called at the same tick on all clients.
         ///     Each subsystem is wrapped in try/catch so a missing manager
         ///     (e.g. during loading) doesn't prevent the rest from hashing.
+        ///     The aggregate hash EXCLUDES TickClock.LocalTick because
+        ///     server and client are always at different ticks.
         /// </summary>
         public static ulong ComputeHash()
         {
@@ -202,9 +204,10 @@ namespace CSM.Sync
             }
             catch { }
 
-            // 11. Tick clock
+            // 11. Tick clock (stored as subsystem hash for diagnostics,
+            // but NOT mixed into the aggregate hash — server and client
+            // are always at different local ticks).
             hashes[Sub_TickClock].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(TickClock.LocalTick));
-            h = Fnv1a(h, BitConverter.GetBytes(TickClock.LocalTick));
 
             // Store per-system hashes for retrieval
             _lastSubsystemHashes = hashes;

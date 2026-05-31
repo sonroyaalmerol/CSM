@@ -7,6 +7,7 @@ using CSM.API.Networking.Status;
 using CSM.Commands;
 using CSM.Commands.Data.Internal;
 using CSM.Commands.Handler.Game;
+using CSM.Commands.Handler.Sync;
 using CSM.Helpers;
 using CSM.Injections;
 using CSM.Mods;
@@ -89,6 +90,7 @@ namespace CSM.Extensions
             TickClock.Initialize(0);
             CommandBuffer.Clear();
             Outbox.Clear();
+            StateHashHandler.Reset();
         }
 
         public override void OnLevelUnloading()

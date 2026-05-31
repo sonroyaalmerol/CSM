@@ -14,6 +14,7 @@ namespace CSM.Commands.Handler.Sync
             TransactionCmd = false;
             RelayOnServer = false;
             RequiresTickSync = false;
+            UseSequencedDelivery = true;
         }
 
         /// <summary>
@@ -80,6 +81,12 @@ namespace CSM.Commands.Handler.Sync
             // Build lookup from their hashes
             for (int i = 0; i < ourHashes.Length; i++)
             {
+                // Skip TickClock subsystem — server and client are expected
+                // to be at different local ticks. Including it would produce
+                // constant noise in the divergence report.
+                if (i == StateHasher.Sub_TickClock)
+                    continue;
+
                 ulong ourSubHash = ourHashes[i].Hash;
 
                 // Find matching subsystem in their hashes
