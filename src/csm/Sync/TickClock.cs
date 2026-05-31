@@ -156,13 +156,10 @@ namespace CSM.Sync
         /// </summary>
         public static uint CalculatePipelineDepth()
         {
-            long rawLatency = GetMaxLatencyMs();
-
-            // Feed the raw latency into EWMA
-            UpdateLatencySample(rawLatency);
-
-            // Use smoothed latency for depth calculation
-            double latencyMs = _ewmaInitialized ? _smoothedMaxLatencyMs : rawLatency;
+            // Use the EWMA-smoothed latency (already updated by LiteNetLib callbacks).
+            // Do NOT call UpdateLatencySample here — that would create duplicate
+            // samples between LiteNetLib events and bias the EWMA.
+            double latencyMs = _ewmaInitialized ? _smoothedMaxLatencyMs : GetMaxLatencyMs();
 
             if (latencyMs <= 0) return _pipelineDepth;
 
