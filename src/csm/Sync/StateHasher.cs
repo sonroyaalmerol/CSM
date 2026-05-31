@@ -19,12 +19,6 @@ namespace CSM.Sync
         private const ulong FnvPrime = 1099511628211UL;
 
         /// <summary>
-        ///     Hash interval: only compute and compare every N ticks.
-        ///     At 60fps, every 60 ticks = once per second.
-        /// </summary>
-        public const uint HashInterval = 60;
-
-        /// <summary>
         ///     Compute a 64-bit hash of critical game state.
         ///     Should be called at the same tick on all clients.
         ///     Each subsystem is wrapped in try/catch so a missing manager
@@ -35,7 +29,11 @@ namespace CSM.Sync
             ulong h = FnvOffset;
 
             // 1. EconomyManager total cash
-            h = Fnv1a(h, BitConverter.GetBytes(EconomyManager.instance.MoneyAmount));
+            try
+            {
+                h = Fnv1a(h, BitConverter.GetBytes(EconomyManager.instance.MoneyAmount));
+            }
+            catch { }
 
             // 2. Current simulation build index (increments on building/prop/tree creation)
             try

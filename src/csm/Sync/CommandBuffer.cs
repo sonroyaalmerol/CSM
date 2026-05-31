@@ -18,9 +18,6 @@ namespace CSM.Sync
 
         private struct TickSlot
         {
-            /// <summary>True when the server confirmed no more commands for this tick.</summary>
-            public bool Complete;
-
             /// <summary>Buffered commands for this tick.</summary>
             public List<BufferedCommand> Commands;
         }
@@ -75,14 +72,7 @@ namespace CSM.Sync
                              $"exceeds ring size {RING_SIZE}. Dropping stale slot and buffering.");
                     TotalBuffered -= slot.Commands.Count;
                     slot.Commands.Clear();
-                    slot.Complete = false;
                 }
-            }
-
-            // Clear completed flag from previous rotation
-            if (slot.Complete)
-            {
-                slot.Complete = false;
             }
 
             if (slot.Commands == null)
@@ -105,26 +95,6 @@ namespace CSM.Sync
         }
 
         /// <summary>
-        ///     Mark a tick as complete (server confirmed no more commands).
-        /// </summary>
-        public static void MarkComplete(uint tick)
-        {
-            int idx = (int)(tick & RING_MASK);
-            _ring[idx].Complete = true;
-            Log.Debug($"[CommandBuffer] Tick {tick} marked complete (idx={idx})");
-        }
-
-        /// <summary>
-        ///     Check if a tick is ready to execute (has all expected commands
-        ///     or is marked complete by the server).
-        /// </summary>
-        public static bool IsReady(uint tick)
-        {
-            int idx = (int)(tick & RING_MASK);
-            return _ring[idx].Complete;
-        }
-
-        /// <summary>
         ///     Drain all commands for the given tick and return them.
         ///     Clears the slot after draining.
         /// </summary>
@@ -139,7 +109,6 @@ namespace CSM.Sync
 
             // Clear slot for reuse
             slot.Commands = null;
-            slot.Complete = false;
 
             if (count > 0)
             {
@@ -149,23 +118,12 @@ namespace CSM.Sync
             return result;
         }
 
-        /// <summary>
-        ///     Get the count of buffered commands for a specific tick.
-        /// </summary>
-        public static int GetTickCommandCount(uint tick)
-        {
-            int idx = (int)(tick & RING_MASK);
-            List<BufferedCommand> list = _ring[idx].Commands;
-            return list != null ? list.Count : 0;
-        }
-
         /// <summary>Clear the entire buffer. Called on disconnect.</summary>
         public static void Clear()
         {
             for (int i = 0; i < RING_SIZE; i++)
             {
                 _ring[i].Commands = null;
-                _ring[i].Complete = false;
             }
             TotalBuffered = 0;
         }

@@ -5,11 +5,10 @@ namespace CSM.Sync
 {
     /// <summary>
     ///     Frame gate: prevents the simulation from advancing past the
-    ///     tick-stamped command frontier. Before each simulation tick,
-    ///     this gate checks whether:
-    ///       1. We haven't exceeded the server's max allowed tick
-    ///       2. The command buffer for the next tick is ready
-    ///     If conditions aren't met, the simulation pauses naturally.
+    ///     server's pipeline window. Before each simulation tick,
+    ///     this gate checks whether the next tick exceeds MaxAllowedTick.
+    ///     If so, the simulation pauses until a TICK_SYNC arrives with
+    ///     an updated window.
     ///
     ///     Coupling contract with SpeedPauseHelper and DesyncDetector:
     ///     ──────────────────────────────────────────────────────────
@@ -23,9 +22,9 @@ namespace CSM.Sync
     ///     the systems from fighting over the pause state.
     ///
     ///     Execution order matters:
-    ///       1. SpeedPauseHelper.SimulationStep() runs in SimulationStep (before tick)
-    ///       2. FrameGate.CanAdvance() runs in OnUpdate (before simulation step)
-    ///       3. DesyncDetector.OnHashMismatch() runs in HandleStateHash (network thread)
+    ///       1. SpeedPauseHelper.SimulationStep() runs in OnBeforeSimulationTick (top)
+    ///       2. FrameGate.CanAdvance() runs in OnBeforeSimulationTick (after SpeedPause)
+    ///       3. DesyncDetector.OnHashMismatch() runs in ParseSyncPacket (network receive)
     ///     Since all run on the main thread (LiteNetLib polls inline),
     ///     there is no concurrent access to m_simulationPaused.
     /// </summary>
@@ -39,12 +38,26 @@ namespace CSM.Sync
         public static bool IsGateClosed { get; private set; }
 
         /// <summary>
+        ///     True on the frame the gate transitions from closed to open.
+        ///     Used by ThreadingExtension to unpause the simulation exactly once.
+        /// </summary>
+        public static bool JustOpened { get; private set; }
+
+        /// <summary>
         ///     Called before each simulation tick.
         ///     Returns true if the simulation is allowed to advance one tick.
         ///     Returns false if the simulation should stall (frame gate closed).
+        ///
+        ///     The gate only checks that we haven't exceeded the server's
+        ///     pipeline window. Commands are drained by ExecuteTick() when
+        ///     the tick actually runs. There is no "tick complete" signal —
+        ///     the server's target tick assignment is the sole coordination
+        ///     mechanism.
         /// </summary>
         public static bool CanAdvance()
         {
+            JustOpened = false;
+
             if (!TickClock.IsInitialized)
             {
                 IsGateClosed = false;
@@ -53,7 +66,7 @@ namespace CSM.Sync
 
             uint nextTick = TickClock.LocalTick + 1;
 
-            // Check 1: Don't run ahead of the server's pipeline window
+            // Don't run ahead of the server's pipeline window
             if (nextTick > TickClock.MaxAllowedTick)
             {
                 Log.Debug($"[FrameGate] Stalled at tick {TickClock.LocalTick}: " +
@@ -62,15 +75,9 @@ namespace CSM.Sync
                 return false;
             }
 
-            // Check 2: If there are commands buffered for the next tick,
-            // wait until the tick is marked complete (all commands received).
-            // If no commands are buffered for that tick, we can proceed freely.
-            if (CommandBuffer.GetTickCommandCount(nextTick) > 0 && !CommandBuffer.IsReady(nextTick))
-            {
-                Log.Debug($"[FrameGate] Waiting for tick {nextTick} commands to complete");
-                IsGateClosed = true;
-                return false;
-            }
+            // Gate transition: closed → open
+            if (IsGateClosed)
+                JustOpened = true;
 
             IsGateClosed = false;
             return true;

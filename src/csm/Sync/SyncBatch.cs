@@ -50,7 +50,7 @@ namespace CSM.Sync
     ///       0x08-0x7D. Multi-byte tags start at 0x80. 0xFE as a tag
     ///       would decode as wire type 6 (0xFE & 0x07 = 6), which is
     ///       reserved and never produced by any valid protobuf encoder.
-    /// </summary>
+    ///
     ///     Thread safety: all SyncWriter/SyncReader operations are expected to
     ///     run on the main Unity thread (LiteNetLib polls inline in
     ///     ThreadingExtension.OnUpdate). The pooled writer uses a runtime
@@ -64,7 +64,6 @@ namespace CSM.Sync
         public const byte SYNC_MAGIC = 0xFE;
 
         // ── Packet type constants ──────────────────────────
-        public const byte TYPE_COMMAND_BATCH = 0; // Reserved
         public const byte TYPE_TICK_SYNC = 1;
         public const byte TYPE_STATE_HASH = 2;
 

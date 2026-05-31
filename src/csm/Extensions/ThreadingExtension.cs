@@ -66,11 +66,21 @@ namespace CSM.Extensions
             // Only clients are gated — the server is the tick authority and
             // advances freely. Clients must wait for the server's pipeline window.
             if (TickClock.IsInitialized &&
-                MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client &&
-                !FrameGate.CanAdvance())
+                MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
             {
-                // Signal the tick loop to skip this frame
-                ReflectionHelper.SetAttr(SimulationManager.instance, "m_simulationPaused", true);
+                if (!FrameGate.CanAdvance())
+                {
+                    // Signal the tick loop to skip this frame
+                    ReflectionHelper.SetAttr(SimulationManager.instance, "m_simulationPaused", true);
+                }
+                else if (FrameGate.JustOpened && !DesyncDetector.IsDesyncPaused)
+                {
+                    // Gate just opened — unpause only if the desync detector hasn't
+                    // also paused. Don't check SpeedPauseHelper here because it runs
+                    // before us in the same method and will re-apply its pause on the
+                    // next frame if needed.
+                    ReflectionHelper.SetAttr(SimulationManager.instance, "m_simulationPaused", false);
+                }
             }
 
             // ── Periodic sync (runs every frame, even when paused) ──

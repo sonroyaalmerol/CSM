@@ -55,7 +55,6 @@ namespace CSM.Sync
         private static int _consecutiveMismatches;
         private static int _consecutiveMatchesSincePause;
         private static bool _desyncPaused;
-        private static uint _lastMismatchTick;
 
         /// <summary>True when the game is paused due to desync.</summary>
         public static bool IsDesyncPaused { get { return _desyncPaused; } }
@@ -71,7 +70,6 @@ namespace CSM.Sync
         {
             _consecutiveMismatches++;
             _consecutiveMatchesSincePause = 0;
-            _lastMismatchTick = tick;
 
             if (_consecutiveMismatches >= MaxConsecutiveMismatches && !_desyncPaused)
             {
@@ -119,7 +117,12 @@ namespace CSM.Sync
                     _consecutiveMismatches = 0;
                     _consecutiveMatchesSincePause = 0;
                     _desyncPaused = false;
-                    ReflectionHelper.SetAttr(SimulationManager.instance, "m_simulationPaused", false);
+                    // Only unpause if the frame gate isn't also stalling.
+                    // If it is, the gate will unpause on its own when ready.
+                    if (!FrameGate.IsGateClosed)
+                    {
+                        ReflectionHelper.SetAttr(SimulationManager.instance, "m_simulationPaused", false);
+                    }
                     Log.Info($"[DesyncDetector] Desync resolved after " +
                              $"{MinConsecutiveMatches} consecutive matches. Game resumed.");
                     PrintChatMessage("Desync resolved. Game resumed.");
@@ -142,7 +145,6 @@ namespace CSM.Sync
             _consecutiveMatchesSincePause = 0;
             _desyncPaused = false;
             _resyncRequested = false;
-            _lastMismatchTick = 0;
         }
 
         /// <summary>
