@@ -1,5 +1,6 @@
 using System;
 using CSM.API;
+using CSM.API.Networking;
 using CSM.Networking;
 
 namespace CSM.Sync

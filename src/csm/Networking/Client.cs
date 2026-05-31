@@ -18,6 +18,7 @@ using CSM.Helpers;
 using CSM.Mods;
 using CSM.Networking.Config;
 using CSM.Util;
+using CSM.Sync;
 using LiteNetLib;
 
 namespace CSM.Networking

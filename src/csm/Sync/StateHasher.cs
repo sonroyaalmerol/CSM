@@ -1,5 +1,6 @@
 using System;
 using ColossalFramework;
+using CSM.API.Helpers;
 
 namespace CSM.Sync
 {
@@ -31,7 +32,8 @@ namespace CSM.Sync
             // 1. EconomyManager total cash
             try
             {
-                h = Fnv1a(h, BitConverter.GetBytes(EconomyManager.instance.MoneyAmount));
+                long cash = (long)ReflectionHelper.GetAttr<object>(EconomyManager.instance, "m_cashAmount");
+                h = Fnv1a(h, BitConverter.GetBytes(cash));
             }
             catch { }
 
@@ -49,7 +51,7 @@ namespace CSM.Sync
                 var citizenMgr = Singleton<CitizenManager>.instance;
                 if (citizenMgr != null)
                 {
-                    h = Fnv1a(h, BitConverter.GetBytes((int)citizenMgr.m_citizenCount));
+                    h = Fnv1a(h, BitConverter.GetBytes(citizenMgr.m_citizens.m_size));
                 }
             }
             catch { }
@@ -184,8 +186,6 @@ namespace CSM.Sync
                     h = Fnv1a(h, BitConverter.GetBytes(b.m_position.z));
                     h = Fnv1a(h, BitConverter.GetBytes((int)b.m_infoIndex));
                     h = Fnv1a(h, BitConverter.GetBytes((int)b.m_productionRate));
-                    h = Fnv1a(h, BitConverter.GetBytes(b.m_electricityBuffer));
-                    h = Fnv1a(h, BitConverter.GetBytes(b.m_waterPipe));
                     h = Fnv1a(h, BitConverter.GetBytes((uint)b.m_flags));
                     sampleCount--;
                 }
