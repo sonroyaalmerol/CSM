@@ -118,7 +118,7 @@ namespace CSM.Panels
                 else if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
                 {
                     // List all the players with latency to server
-                    int myLatency = MultiplayerManager.Instance.CurrentClient.ClientPlayer.Latency;
+                    int myLatency = (int)MultiplayerManager.Instance.CurrentClient.ClientPlayer.Latency;
                     string pipelineInfo = TickClock.IsInitialized ? $" | Pipeline: {TickClock.PipelineDepth}" : "";
                     foreach (string player in MultiplayerManager.Instance.PlayerList)
                     {
