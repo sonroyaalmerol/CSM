@@ -10,6 +10,7 @@ using CSM.Helpers;
 using CSM.Models;
 using CSM.Mods;
 using CSM.Networking;
+using CSM.Sync;
 using ColossalFramework.Math;
 using CSM.BaseGame.Injections.Tools;
 using LiteNetLib;
@@ -74,6 +75,13 @@ namespace CSM.Commands
             TransactionHandler.StartTransaction(command);
             SetSenderId(command);
 
+            // Record tick-synced commands for redundant retransmission
+            var handler = GetCommandHandler(command.GetType());
+            if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
+            {
+                Outbox.RecordSent(command);
+            }
+
             MultiplayerManager.Instance.CurrentServer.SendToClients(command);
         }
 
@@ -107,6 +115,13 @@ namespace CSM.Commands
 
             TransactionHandler.StartTransaction(command);
             SetSenderId(command);
+
+            // Record tick-synced commands for redundant retransmission
+            var handler = GetCommandHandler(command.GetType());
+            if (handler != null && handler.RequiresTickSync && TickClock.IsInitialized)
+            {
+                Outbox.RecordSent(command);
+            }
 
             MultiplayerManager.Instance.CurrentClient.SendToServer(command);
         }

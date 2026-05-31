@@ -42,8 +42,10 @@ namespace CSM.Sync
         ///     Buffer a command for execution at the given target tick.
         ///     If the target tick has already passed, the command is executed immediately
         ///     by the caller (this method returns false).
+        ///     Deduplicates redundant retransmissions by checking if the command
+        ///     type + target tick already exists in the slot.
         /// </summary>
-        /// <returns>true if buffered, false if tick already passed.</returns>
+        /// <returns>true if buffered, false if tick already passed or duplicate.</returns>
         public static bool Buffer(uint targetTick, CommandHandler handler, CommandBase cmd, uint currentTick)
         {
             // If the target tick is in the past, don't buffer — let caller execute immediately.
@@ -54,17 +56,10 @@ namespace CSM.Sync
 
             int idx = (int)(targetTick & RING_MASK);
 
-            // Guard against ring collision: if the slot is still occupied by a
-            // command from a previous rotation (targetTick differs by >= RING_SIZE),
-            // the pipeline has stalled for over 4 seconds. Drop the stale command
-            // with a warning — it's from a tick so old it can never execute correctly.
+            // Guard against ring collision
             ref TickSlot slot = ref _ring[idx];
             if (slot.Commands != null && slot.Commands.Count > 0)
             {
-                // Check for wrap-around collision: if the distance exceeds RING_SIZE,
-                // the slot belongs to a tick from a previous rotation.
-                // This should never happen in normal operation (MaxPipelineDepth=60 << 256)
-                // but guards against pathological network stalls.
                 int distance = (int)(targetTick - currentTick);
                 if (distance >= RING_SIZE)
                 {
@@ -72,6 +67,22 @@ namespace CSM.Sync
                              $"exceeds ring size {RING_SIZE}. Dropping stale slot and buffering.");
                     TotalBuffered -= slot.Commands.Count;
                     slot.Commands.Clear();
+                }
+                else
+                {
+                    // Deduplication: check if this command type is already buffered for this tick.
+                    // Handles redundant retransmissions from the Outbox system.
+                    string cmdType = cmd.GetType().Name;
+                    for (int i = 0; i < slot.Commands.Count; i++)
+                    {
+                        if (slot.Commands[i].Command.GetType().Name == cmdType &&
+                            slot.Commands[i].Command.SenderId == cmd.SenderId)
+                        {
+                            Log.Debug($"[CommandBuffer] Duplicate {cmdType} from sender {cmd.SenderId} " +
+                                      $"for tick {targetTick} — dropping redundant retransmission.");
+                            return false;
+                        }
+                    }
                 }
             }
 

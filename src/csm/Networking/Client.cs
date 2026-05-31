@@ -17,6 +17,7 @@ using CSM.Commands.Handler.Internal;
 using CSM.Helpers;
 using CSM.Mods;
 using CSM.Networking.Config;
+using CSM.Sync;
 using CSM.Util;
 using LiteNetLib;
 
@@ -510,6 +511,9 @@ namespace CSM.Networking
         private void ListenerOnNetworkLatencyUpdateEvent(NetPeer peer, int latency)
         {
             ClientPlayer.Latency = latency;
+
+            // Feed latency sample into EWMA for adaptive pipeline depth
+            TickClock.UpdateLatencySample(latency);
         }
 
         public void StartMainMenuEventProcessor()

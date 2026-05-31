@@ -15,6 +15,15 @@ namespace CSM.Sync
     ///     All clients must reconnect after a server crash/restart.
     ///     Tick values are unsigned and monotonically increasing within
     ///     a session — they wrap at uint.MaxValue (~2 years at 60fps).
+    ///
+    ///     Adaptive pipeline depth:
+    ///     ────────────────────────
+    ///     Uses EWMA (exponentially weighted moving average) to smooth
+    ///     latency readings and prevent the pipeline from jumping wildly
+    ///     on individual spikes. Pipeline depth transitions are rate-limited
+    ///     so the game never experiences sudden speed changes.
+    ///     Inspired by Age of Empires' turn-length controller: "Consistent
+    ///     500ms lag feels better than variable 80-500ms lag."
     /// </summary>
     public static class TickClock
     {
@@ -31,13 +40,46 @@ namespace CSM.Sync
         private const uint MaxPipelineDepth = 180; // ~3000ms (supports up to ~750ms one-way)
         private const uint DefaultPipelineDepth = 20; // ~333ms
 
+        // ── Adaptive pipeline (EWMA) ───────────────────────
+        // EWMA alpha: controls how quickly the smoothed latency
+        // responds to new readings. 0.2 = fairly smooth, takes ~5
+        // readings to converge. Higher = more responsive but noisier.
+        private const double EwmaAlpha = 0.2;
+
+        // Maximum pipeline depth change per TICK_SYNC interval (200ms).
+        // At 60fps, 2 ticks per interval means depth changes gradually.
+        // This prevents the "jerky" feeling from sudden pipeline jumps.
+        private const uint MaxPipelineChangePerInterval = 3;
+
+        /// <summary>
+        ///     Smoothed (EWMA) max latency in milliseconds.
+        ///     Updated on every latency sample from LiteNetLib.
+        ///     Prevents pipeline depth from reacting to single spikes.
+        /// </summary>
+        private static double _smoothedMaxLatencyMs;
+
+        /// <summary>
+        ///     Whether the EWMA has received its first sample.
+        ///     Until then, CalculatePipelineDepth uses the raw value.
+        /// </summary>
+        private static bool _ewmaInitialized;
+
+        /// <summary>
+        ///     The last pipeline depth we computed. Used to rate-limit
+        ///     transitions so depth changes smoothly.
+        /// </summary>
+        private static uint _lastComputedDepth;
+
         /// <summary>This client's current simulation tick.</summary>
         public static uint LocalTick { get { return _localTick; } }
 
         /// <summary>Last known server tick (from TICK_SYNC).</summary>
         public static uint ServerTick { get { return _serverTick; } }
 
-        /// <summary>How many ticks ahead of server we're allowed to run.</summary>
+        /// <summary>
+        ///     How many ticks ahead of server we're allowed to run.
+        ///     Set by the server based on EWMA-smoothed max latency.
+        /// </summary>
         /// <remarks>
         ///     Write contract:
         ///     - Server: set by CalculatePipelineDepth() based on max client latency.
@@ -84,29 +126,74 @@ namespace CSM.Sync
         }
 
         /// <summary>
-        ///     Calculate optimal pipeline depth based on network latency.
-        ///     Higher latency → deeper pipeline to avoid stalls.
-        ///     Only called by the server — stores the result so relay
-        ///     stamping uses the same value sent in TICK_SYNC.
-        ///     Clients receive the server's depth via OnServerTick().
+        ///     Feed a new latency sample into the EWMA smoother.
+        ///     Called from the LiteNetLib latency update callbacks
+        ///     (Server.ListenerOnNetworkLatencyUpdateEvent,
+        ///      Client.ListenerOnNetworkLatencyUpdateEvent).
+        ///     Samples arrive every ~2 seconds (PingInterval).
+        /// </summary>
+        public static void UpdateLatencySample(long rawLatencyMs)
+        {
+            if (rawLatencyMs <= 0)
+                return;
+
+            if (!_ewmaInitialized)
+            {
+                _smoothedMaxLatencyMs = rawLatencyMs;
+                _ewmaInitialized = true;
+                return;
+            }
+
+            // EWMA: new = alpha * sample + (1 - alpha) * old
+            _smoothedMaxLatencyMs = EwmaAlpha * rawLatencyMs +
+                                    (1.0 - EwmaAlpha) * _smoothedMaxLatencyMs;
+        }
+
+        /// <summary>
+        ///     Calculate optimal pipeline depth based on EWMA-smoothed latency.
+        ///     Only called by the server on each TICK_SYNC interval.
+        ///     Depth changes are rate-limited to prevent sudden jumps.
         /// </summary>
         public static uint CalculatePipelineDepth()
         {
-            long maxLatency = GetMaxLatencyMs();
+            long rawLatency = GetMaxLatencyMs();
 
-            if (maxLatency <= 0) return _pipelineDepth;
+            // Feed the raw latency into EWMA
+            UpdateLatencySample(rawLatency);
+
+            // Use smoothed latency for depth calculation
+            double latencyMs = _ewmaInitialized ? _smoothedMaxLatencyMs : rawLatency;
+
+            if (latencyMs <= 0) return _pipelineDepth;
 
             // Convert ms to ticks (60 ticks/sec → 16.6ms/tick)
-            uint ticksForLatency = (uint)((maxLatency * 60) / 1000);
+            uint ticksForLatency = (uint)((latencyMs * 60) / 1000);
 
             // Pipeline = 2x latency ticks + safety margin
-            uint depth = ticksForLatency * 2 + 6;
+            uint targetDepth = ticksForLatency * 2 + 6;
 
-            depth = Math.Max(MinPipelineDepth, Math.Min(MaxPipelineDepth, depth));
+            targetDepth = Math.Max(MinPipelineDepth, Math.Min(MaxPipelineDepth, targetDepth));
 
-            // Store so relay stamping uses the same value sent in TICK_SYNC
-            _pipelineDepth = depth;
-            return depth;
+            // ── Rate-limited transition ─────────────────────
+            // Never change the pipeline by more than MaxPipelineChangePerInterval
+            // per TICK_SYNC (200ms). This makes speed transitions smooth.
+            uint prevDepth = _lastComputedDepth;
+            uint delta;
+
+            if (targetDepth > prevDepth)
+            {
+                delta = Math.Min(targetDepth - prevDepth, MaxPipelineChangePerInterval);
+                targetDepth = prevDepth + delta;
+            }
+            else if (targetDepth < prevDepth)
+            {
+                delta = Math.Min(prevDepth - targetDepth, MaxPipelineChangePerInterval);
+                targetDepth = prevDepth - delta;
+            }
+
+            _lastComputedDepth = targetDepth;
+            _pipelineDepth = targetDepth;
+            return targetDepth;
         }
 
         /// <summary>Initialize the clock. Called on game load / connect.</summary>
@@ -115,6 +202,9 @@ namespace CSM.Sync
             _localTick = startTick;
             _serverTick = startTick;
             _pipelineDepth = DefaultPipelineDepth;
+            _lastComputedDepth = DefaultPipelineDepth;
+            _smoothedMaxLatencyMs = 0;
+            _ewmaInitialized = false;
             _initialized = true;
             Log.Info($"[TickClock] Initialized at tick {startTick}, pipeline depth {DefaultPipelineDepth}");
         }
@@ -125,6 +215,9 @@ namespace CSM.Sync
             _localTick = 0;
             _serverTick = 0;
             _pipelineDepth = DefaultPipelineDepth;
+            _lastComputedDepth = DefaultPipelineDepth;
+            _smoothedMaxLatencyMs = 0;
+            _ewmaInitialized = false;
             _initialized = false;
         }
 

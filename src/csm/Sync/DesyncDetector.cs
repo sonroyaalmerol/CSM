@@ -63,7 +63,7 @@ namespace CSM.Sync
         ///     Called when a STATE_HASH mismatch is detected.
         ///     Handles counting, pausing, and notification.
         /// </summary>
-        public static void OnHashMismatch(uint tick, ulong ourHash, ulong theirHash, int senderId)
+        public static void OnHashMismatch(uint tick, ulong ourHash, ulong theirHash, int senderId, string divergenceReport)
         {
             _consecutiveMismatches++;
             _consecutiveMatchesSincePause = 0;
@@ -78,7 +78,8 @@ namespace CSM.Sync
                 // Notify players
                 string msg = $"Desync detected at tick {tick}. " +
                              $"Consecutive mismatches: {_consecutiveMismatches}. " +
-                             $"Game paused. Hash: 0x{ourHash:X16} vs 0x{theirHash:X16}.";
+                             $"Game paused. Hash: 0x{ourHash:X16} vs 0x{theirHash:X16}." +
+                             (divergenceReport.Length > 0 ? $"\n{divergenceReport}" : "");
                 Log.Error($"[DesyncDetector] {msg}");
                 PrintChatMessage(msg);
             }

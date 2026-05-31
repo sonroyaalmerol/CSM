@@ -378,6 +378,9 @@ namespace CSM.Networking
                 return;
 
             player.Latency = latency;
+
+            // Feed latency sample into EWMA for adaptive pipeline depth
+            TickClock.UpdateLatencySample(latency);
         }
 
         private void ListenerOnPeerDisconnectedEvent(NetPeer peer, DisconnectInfo disconnectInfo)

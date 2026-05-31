@@ -88,6 +88,7 @@ namespace CSM.Extensions
             // Initialize the tick sync clock
             TickClock.Initialize(0);
             CommandBuffer.Clear();
+            Outbox.Clear();
         }
 
         public override void OnLevelUnloading()

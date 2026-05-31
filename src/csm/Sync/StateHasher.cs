@@ -1,6 +1,7 @@
 using System;
 using ColossalFramework;
 using CSM.API.Helpers;
+using CSM.Commands.Data.Sync;
 
 namespace CSM.Sync
 {
@@ -9,15 +10,47 @@ namespace CSM.Sync
     ///     Used to detect drift between clients.
     ///     FNV-1a: 1 multiply + 1 XOR per byte. No allocations.
     ///
-    ///     Covers: economy, build index, population, buildings (deep),
-    ///     network segments (deep), trees, props, districts (with policies),
-    ///     transport lines, vehicles, and tick clock.
+    ///     Computes both an aggregate hash and per-subsystem checksums
+    ///     so that desync diagnosis can pinpoint WHICH subsystem diverged
+    ///     instead of just knowing "something's wrong."
+    ///
+    ///     Subsystem IDs:
+    ///       0 = Economy, 1 = BuildIndex, 2 = Population, 3 = Buildings,
+    ///       4 = Networks, 5 = Trees, 6 = Props, 7 = Districts,
+    ///       8 = Transport, 9 = Vehicles, 10 = TickClock.
     /// </summary>
     public static class StateHasher
     {
         // FNV-1a constants (64-bit)
         private const ulong FnvOffset = 14695981039346656037UL;
         private const ulong FnvPrime = 1099511628211UL;
+
+        /// <summary>
+        ///     Subsystem IDs matching the indices in StateHashCommand.
+        /// </summary>
+        public const int Sub_Economy = 0;
+        public const int Sub_BuildIndex = 1;
+        public const int Sub_Population = 2;
+        public const int Sub_Buildings = 3;
+        public const int Sub_Networks = 4;
+        public const int Sub_Trees = 5;
+        public const int Sub_Props = 6;
+        public const int Sub_Districts = 7;
+        public const int Sub_Transport = 8;
+        public const int Sub_Vehicles = 9;
+        public const int Sub_TickClock = 10;
+        public const int SubsystemCount = 11;
+
+        /// <summary>
+        ///     Human-readable names for each subsystem ID.
+        ///     Used in desync log messages for diagnosis.
+        /// </summary>
+        public static readonly string[] SubsystemNames = new string[]
+        {
+            "Economy", "BuildIndex", "Population", "Buildings",
+            "Networks", "Trees", "Props", "Districts",
+            "Transport", "Vehicles", "TickClock"
+        };
 
         /// <summary>
         ///     Compute a 64-bit hash of critical game state.
@@ -28,19 +61,27 @@ namespace CSM.Sync
         public static ulong ComputeHash()
         {
             ulong h = FnvOffset;
+            var hashes = new SubsystemHashEntry[SubsystemCount];
+
+            for (int i = 0; i < SubsystemCount; i++)
+            {
+                hashes[i] = new SubsystemHashEntry { SubsystemId = i, Hash = 0 };
+            }
 
             // 1. EconomyManager total cash
             try
             {
                 long cash = (long)ReflectionHelper.GetAttr<object>(EconomyManager.instance, "m_cashAmount");
+                hashes[Sub_Economy].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(cash));
                 h = Fnv1a(h, BitConverter.GetBytes(cash));
             }
             catch { }
 
-            // 2. Current simulation build index (increments on building/prop/tree creation)
+            // 2. Current simulation build index
             try
             {
                 uint frameIdx = (uint)SimulationManager.instance.m_currentBuildIndex;
+                hashes[Sub_BuildIndex].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(frameIdx));
                 h = Fnv1a(h, BitConverter.GetBytes(frameIdx));
             }
             catch { }
@@ -51,6 +92,7 @@ namespace CSM.Sync
                 var citizenMgr = Singleton<CitizenManager>.instance;
                 if (citizenMgr != null)
                 {
+                    hashes[Sub_Population].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(citizenMgr.m_citizens.m_size));
                     h = Fnv1a(h, BitConverter.GetBytes(citizenMgr.m_citizens.m_size));
                 }
             }
@@ -63,6 +105,10 @@ namespace CSM.Sync
                 if (bm != null)
                 {
                     h = Fnv1a(h, BitConverter.GetBytes(bm.m_buildings.m_size));
+                    ulong bHash = FnvOffset;
+                    bHash = Fnv1a(bHash, BitConverter.GetBytes(bm.m_buildings.m_size));
+                    bHash = HashSampledBuildings(bHash, bm, 32);
+                    hashes[Sub_Buildings].Hash = bHash;
                     h = HashSampledBuildings(h, bm, 32);
                 }
             }
@@ -75,6 +121,10 @@ namespace CSM.Sync
                 if (nm != null)
                 {
                     h = Fnv1a(h, BitConverter.GetBytes(nm.m_segments.m_size));
+                    ulong nHash = FnvOffset;
+                    nHash = Fnv1a(nHash, BitConverter.GetBytes(nm.m_segments.m_size));
+                    nHash = HashSampledSegments(nHash, nm, 24);
+                    hashes[Sub_Networks].Hash = nHash;
                     h = HashSampledSegments(h, nm, 24);
                 }
             }
@@ -86,6 +136,7 @@ namespace CSM.Sync
                 var tm = Singleton<TreeManager>.instance;
                 if (tm != null)
                 {
+                    hashes[Sub_Trees].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(tm.m_trees.m_size));
                     h = Fnv1a(h, BitConverter.GetBytes(tm.m_trees.m_size));
                 }
             }
@@ -97,6 +148,7 @@ namespace CSM.Sync
                 var pm = Singleton<PropManager>.instance;
                 if (pm != null)
                 {
+                    hashes[Sub_Props].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(pm.m_props.m_size));
                     h = Fnv1a(h, BitConverter.GetBytes(pm.m_props.m_size));
                 }
             }
@@ -108,6 +160,12 @@ namespace CSM.Sync
                 var dm = Singleton<DistrictManager>.instance;
                 if (dm != null)
                 {
+                    ulong dHash = FnvOffset;
+                    dHash = Fnv1a(dHash, BitConverter.GetBytes(dm.m_districts.m_size));
+                    dHash = Fnv1a(dHash, BitConverter.GetBytes(dm.m_parks.m_size));
+                    dHash = HashDistrictPolicies(dHash, dm);
+                    hashes[Sub_Districts].Hash = dHash;
+
                     h = Fnv1a(h, BitConverter.GetBytes(dm.m_districts.m_size));
                     h = Fnv1a(h, BitConverter.GetBytes(dm.m_parks.m_size));
                     h = HashDistrictPolicies(h, dm);
@@ -121,6 +179,7 @@ namespace CSM.Sync
                 var tlMgr = Singleton<TransportManager>.instance;
                 if (tlMgr != null)
                 {
+                    hashes[Sub_Transport].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(tlMgr.m_lines.m_size));
                     h = Fnv1a(h, BitConverter.GetBytes(tlMgr.m_lines.m_size));
                 }
             }
@@ -132,17 +191,37 @@ namespace CSM.Sync
                 var vm = Singleton<VehicleManager>.instance;
                 if (vm != null)
                 {
+                    ulong vHash = FnvOffset;
+                    vHash = Fnv1a(vHash, BitConverter.GetBytes(vm.m_vehicles.m_size));
+                    vHash = Fnv1a(vHash, BitConverter.GetBytes(vm.m_parkedVehicles.m_size));
+                    hashes[Sub_Vehicles].Hash = vHash;
+
                     h = Fnv1a(h, BitConverter.GetBytes(vm.m_vehicles.m_size));
                     h = Fnv1a(h, BitConverter.GetBytes(vm.m_parkedVehicles.m_size));
                 }
             }
             catch { }
 
-            // 11. Tick clock (catches tick drift)
+            // 11. Tick clock
+            hashes[Sub_TickClock].Hash = Fnv1a(FnvOffset, BitConverter.GetBytes(TickClock.LocalTick));
             h = Fnv1a(h, BitConverter.GetBytes(TickClock.LocalTick));
+
+            // Store per-system hashes for retrieval
+            _lastSubsystemHashes = hashes;
 
             return h;
         }
+
+        /// <summary>
+        ///     Get the per-subsystem hashes from the last ComputeHash() call.
+        ///     Returns null if ComputeHash() hasn't been called yet.
+        /// </summary>
+        public static SubsystemHashEntry[] GetSubsystemHashes()
+        {
+            return _lastSubsystemHashes;
+        }
+
+        private static SubsystemHashEntry[] _lastSubsystemHashes;
 
         // ── FNV-1a core ────────────────────────────────────
         // One multiply + one XOR per byte. Faster than MD5/SHA by ~50x.
@@ -163,8 +242,6 @@ namespace CSM.Sync
         ///     Instead of iterating all 49152 entries, we sample every
         ///     Nth building and hash position, infoIndex, productionRate,
         ///     and flags.
-        ///     This catches desyncs in building state, AI configuration,
-        ///     and utility connections while staying fast.
         /// </summary>
         private static ulong HashSampledBuildings(ulong h, BuildingManager bm, int sampleCount)
         {
@@ -196,7 +273,6 @@ namespace CSM.Sync
 
         /// <summary>
         ///     Hash a sample of network segments for position, info, and flags.
-        ///     Catches desyncs in road/network placement and configuration.
         /// </summary>
         private static ulong HashSampledSegments(ulong h, NetManager nm, int sampleCount)
         {
@@ -226,9 +302,6 @@ namespace CSM.Sync
 
         /// <summary>
         ///     Hash district and park state.
-        ///     Iterates all district/park buffers and hashes flags, style,
-        ///     and random seed. This catches district creation, deletion,
-        ///     and style changes that could indicate desync.
         /// </summary>
         private static ulong HashDistrictPolicies(ulong h, DistrictManager dm)
         {

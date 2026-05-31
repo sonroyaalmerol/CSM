@@ -90,14 +90,21 @@ namespace CSM.Extensions
             // detection and recovery can work during pause-induced stalls.
             if (TickClock.IsInitialized && MultiplayerManager.Instance.IsConnected())
             {
-                // Server: broadcast tick sync
+                // Server: broadcast tick sync + redundant retransmission
                 if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
                 {
                     if (DateTime.Now.Subtract(_lastTickSync).TotalMilliseconds > TickSyncIntervalMs)
                     {
                         SendTickSync();
+                        Outbox.FlushRedundant();
                         _lastTickSync = DateTime.Now;
                     }
+                }
+                // Client: redundant retransmission on same interval
+                else if (DateTime.Now.Subtract(_lastTickSync).TotalMilliseconds > TickSyncIntervalMs)
+                {
+                    Outbox.FlushRedundant();
+                    _lastTickSync = DateTime.Now;
                 }
 
                 // State hash: send periodically even when paused so desync
@@ -179,7 +186,8 @@ namespace CSM.Extensions
             {
                 Tick = TickClock.LocalTick,
                 Hash = hash,
-                SenderId = senderId
+                SenderId = senderId,
+                SubsystemHashes = StateHasher.GetSubsystemHashes()
             });
         }
     }

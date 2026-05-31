@@ -179,6 +179,7 @@
 		<Compile Include="Sync\CommandBuffer.cs" />
 		<Compile Include="Sync\FrameGate.cs" />
 		<Compile Include="Sync\StateHasher.cs" />
+		<Compile Include="Sync\Outbox.cs" />
 
 		<Compile Include="Sync\DesyncDetector.cs" />
 	</ItemGroup>
