@@ -162,7 +162,7 @@ namespace CSM.Sync
         ///     Hash a sample of buildings from the building buffer.
         ///     Instead of iterating all 49152 entries, we sample every
         ///     Nth building and hash position, infoIndex, productionRate,
-        ///     electricityBuffer, waterPipe, and flags.
+        ///     and flags.
         ///     This catches desyncs in building state, AI configuration,
         ///     and utility connections while staying fast.
         /// </summary>

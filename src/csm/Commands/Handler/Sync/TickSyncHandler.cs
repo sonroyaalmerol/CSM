@@ -1,7 +1,6 @@
 using CSM.API;
 using CSM.API.Commands;
 using CSM.Commands.Data.Sync;
-using CSM.Networking;
 using CSM.Sync;
 
 namespace CSM.Commands.Handler.Sync

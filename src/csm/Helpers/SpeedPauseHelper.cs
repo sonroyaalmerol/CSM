@@ -456,30 +456,6 @@ namespace CSM.Helpers
         }
 
         /// <summary>
-        ///     Computes the minimum network latency of connected clients.
-        ///     When acting as a server with connected clients, this will return the minimum latency to one of the clients.
-        ///     When acting as a client, this returns the latency to the server.
-        ///     Otherwise this returns 0.
-        /// </summary>
-        /// <returns>The minimum network latency.</returns>
-        private static long GetMinimumLatency()
-        {
-            if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
-            {
-                return MultiplayerManager.Instance.CurrentClient.ClientPlayer.Latency;
-            }
-            else if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.None ||
-                     MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Count == 0)
-            {
-                return 0;
-            }
-            else
-            {
-                return MultiplayerManager.Instance.CurrentServer.ConnectedPlayers.Values.Min(player => player.Latency);
-            }
-        }
-
-        /// <summary>
         ///     Computes how much in game time will pass during the given amount of milliseconds.
         ///     This also considers the current game speed.
         /// </summary>

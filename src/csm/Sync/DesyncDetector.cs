@@ -59,9 +59,6 @@ namespace CSM.Sync
         /// <summary>True when the game is paused due to desync.</summary>
         public static bool IsDesyncPaused { get { return _desyncPaused; } }
 
-        /// <summary>True when a resync is in progress.</summary>
-        public static bool IsResyncing { get { return _resyncRequested; } }
-
         /// <summary>
         ///     Called when a STATE_HASH mismatch is detected.
         ///     Handles counting, pausing, and notification.
