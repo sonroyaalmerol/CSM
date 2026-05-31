@@ -90,6 +90,8 @@ namespace CSM.Extensions
             TickClock.Initialize(0);
             CommandBuffer.Clear();
             Outbox.Clear();
+            FrameGate.Reset();
+            DesyncDetector.Reset();
             StateHashHandler.Reset();
         }
 

@@ -145,6 +145,7 @@ namespace CSM.Networking
             TickClock.Reset();
             CommandBuffer.Clear();
             Outbox.Clear();
+            FrameGate.Reset();
             DesyncDetector.Reset();
             StateHashHandler.Reset();
         }
@@ -166,6 +167,7 @@ namespace CSM.Networking
                 TickClock.Reset();
                 CommandBuffer.Clear();
                 Outbox.Clear();
+                FrameGate.Reset();
                 DesyncDetector.Reset();
                 StateHashHandler.Reset();
             }

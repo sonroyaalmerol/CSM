@@ -3,6 +3,7 @@ using ColossalFramework.UI;
 using CSM.API.Commands;
 using CSM.Helpers;
 using CSM.Networking;
+using CSM.Sync;
 using UnityEngine;
 
 namespace CSM.Panels
@@ -82,10 +83,21 @@ namespace CSM.Panels
                 // Enable Host to see and kick all players
                 if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Server)
                 {
-                    // List all the players
+                    // List all the players with latency
                     foreach (string player in MultiplayerManager.Instance.PlayerList)
                     {
-                        _playerLabels.Add(this.CreateLabel(player, new Vector2(10, topOffset + currentPlayerOffset)));
+                        string latencyInfo = "";
+                        if (player != MultiplayerManager.Instance.CurrentServer.HostPlayer.Username)
+                        {
+                            try
+                            {
+                                var p = MultiplayerManager.Instance.CurrentServer.GetPlayerByUsername(player);
+                                if (p != null)
+                                    latencyInfo = $" ({p.Latency}ms)";
+                            }
+                            catch { /* player may have disconnected */ }
+                        }
+                        _playerLabels.Add(this.CreateLabel(player + latencyInfo, new Vector2(10, topOffset + currentPlayerOffset)));
 
                         if (player != MultiplayerManager.Instance.CurrentServer.HostPlayer.Username)
                         {
@@ -105,10 +117,14 @@ namespace CSM.Panels
                 // Enable Client to see all players
                 else if (MultiplayerManager.Instance.CurrentRole == MultiplayerRole.Client)
                 {
-                    // List all the players
+                    // List all the players with latency to server
+                    int myLatency = MultiplayerManager.Instance.CurrentClient.ClientPlayer.Latency;
+                    string pipelineInfo = TickClock.IsInitialized ? $" | Pipeline: {TickClock.PipelineDepth}" : "";
                     foreach (string player in MultiplayerManager.Instance.PlayerList)
                     {
-                        _playerLabels.Add(this.CreateLabel(player, new Vector2(10, topOffset + currentPlayerOffset)));
+                        string suffix = (player == MultiplayerManager.Instance.CurrentClient.ClientPlayer.Username)
+                            ? $" ({myLatency}ms{pipelineInfo})" : "";
+                        _playerLabels.Add(this.CreateLabel(player + suffix, new Vector2(10, topOffset + currentPlayerOffset)));
 
                         currentPlayerOffset += playerOffset;
                     }

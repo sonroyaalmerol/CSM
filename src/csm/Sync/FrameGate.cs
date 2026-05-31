@@ -137,5 +137,13 @@ namespace CSM.Sync
 
             TickClock.Advance();
         }
+
+        /// <summary>Reset gate state. Called on disconnect.</summary>
+        public static void Reset()
+        {
+            IsGateClosed = false;
+            JustOpened = false;
+            _stallWarned = false;
+        }
     }
 }
